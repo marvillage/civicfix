@@ -157,7 +157,7 @@ export default function AdminAssignments() {
               to="/admin"
               className="admin-back-link"
             >
-              ← Back to Dashboard
+              ‹ Back to Dashboard
             </Link>
 
             <h1>Assignments</h1>
@@ -415,7 +415,7 @@ export default function AdminAssignments() {
       <style>{`
         .admin-page {
           min-height: 100vh;
-          background: #f5f7fb;
+          background: var(--bg);
           padding: 32px;
         }
 
@@ -435,31 +435,31 @@ export default function AdminAssignments() {
         .admin-back-link {
           display: inline-block;
           margin-bottom: 12px;
-          color: #667085;
+          color: var(--text-muted);
           text-decoration: none;
           font-size: 14px;
           font-weight: 500;
         }
 
         .admin-back-link:hover {
-          color: #111827;
+          color: var(--text);
         }
 
         .admin-page-header h1 {
           margin: 0 0 6px;
           font-size: 30px;
-          color: #111827;
+          color: var(--text);
         }
 
         .admin-page-header p {
           margin: 0;
-          color: #667085;
+          color: var(--text-muted);
         }
 
         .admin-refresh-btn {
           border: none;
-          background: #111827;
-          color: white;
+          background: var(--primary);
+          color: var(--primary-ink);
           padding: 10px 16px;
           border-radius: 8px;
           cursor: pointer;
@@ -467,13 +467,13 @@ export default function AdminAssignments() {
         }
 
         .admin-refresh-btn:hover {
-          opacity: 0.9;
+          background: var(--primary-dark);
         }
 
         .admin-error {
-          background: #fef2f2;
-          color: #b42318;
-          border: 1px solid #fecdca;
+          background: var(--danger-soft);
+          color: var(--danger);
+          border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
           border-radius: 10px;
           padding: 14px 16px;
           margin-bottom: 20px;
@@ -491,8 +491,8 @@ export default function AdminAssignments() {
 
         .admin-stat-card {
           text-align: left;
-          border: 1px solid #e4e7ec;
-          background: white;
+          border: 1px solid var(--border);
+          background: var(--surface);
           border-radius: 12px;
           padding: 18px;
           cursor: pointer;
@@ -500,49 +500,51 @@ export default function AdminAssignments() {
         }
 
         .admin-stat-card:hover {
-          border-color: #98a2b3;
+          border-color: var(--border-strong);
           transform: translateY(-1px);
         }
 
         .admin-stat-card.active {
-          border-color: #111827;
-          box-shadow: 0 0 0 1px #111827;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 1px var(--primary);
         }
 
         .admin-stat-card span {
           display: block;
-          color: #667085;
+          color: var(--text-muted);
           font-size: 13px;
           margin-bottom: 8px;
         }
 
         .admin-stat-card strong {
           display: block;
-          color: #111827;
+          color: var(--text);
+          font-family: var(--font-data);
+          font-variant-numeric: tabular-nums;
           font-size: 28px;
         }
 
         .admin-section {
-          background: white;
-          border: 1px solid #e4e7ec;
+          background: var(--surface);
+          border: 1px solid var(--border);
           border-radius: 14px;
           overflow: hidden;
         }
 
         .admin-section-header {
           padding: 22px 24px;
-          border-bottom: 1px solid #eaecf0;
+          border-bottom: 1px solid var(--border);
         }
 
         .admin-section-header h2 {
           margin: 0 0 5px;
           font-size: 20px;
-          color: #101828;
+          color: var(--text);
         }
 
         .admin-section-header p {
           margin: 0;
-          color: #667085;
+          color: var(--text-muted);
           font-size: 14px;
         }
 
@@ -558,28 +560,28 @@ export default function AdminAssignments() {
         }
 
         .admin-table th {
-          background: #f9fafb;
-          color: #667085;
+          background: var(--surface-soft);
+          color: var(--text-muted);
           font-size: 12px;
           text-transform: uppercase;
           letter-spacing: 0.04em;
           font-weight: 600;
           text-align: left;
           padding: 13px 16px;
-          border-bottom: 1px solid #eaecf0;
+          border-bottom: 1px solid var(--border);
           white-space: nowrap;
         }
 
         .admin-table td {
           padding: 16px;
-          border-bottom: 1px solid #f0f2f5;
-          color: #344054;
+          border-bottom: 1px solid var(--border);
+          color: var(--text-secondary);
           font-size: 14px;
           vertical-align: middle;
         }
 
         .admin-table tbody tr:hover {
-          background: #fafbfc;
+          background: var(--surface-soft);
         }
 
         .assignment-issue {
@@ -590,7 +592,7 @@ export default function AdminAssignments() {
         }
 
         .assignment-issue-link {
-          color: #101828;
+          color: var(--text);
           text-decoration: none;
           font-weight: 600;
         }
@@ -600,7 +602,7 @@ export default function AdminAssignments() {
         }
 
         .assignment-issue span {
-          color: #667085;
+          color: var(--text-muted);
           font-size: 12px;
         }
 
@@ -611,12 +613,12 @@ export default function AdminAssignments() {
         }
 
         .assignment-person strong {
-          color: #101828;
+          color: var(--text);
           font-size: 14px;
         }
 
         .assignment-person span {
-          color: #667085;
+          color: var(--text-muted);
           font-size: 12px;
         }
 
@@ -633,33 +635,33 @@ export default function AdminAssignments() {
         }
 
         .status-pending {
-          background: #fff7ed;
-          color: #c2410c;
+          background: #241d12;
+          color: #d9a253;
         }
 
         .status-accepted {
-          background: #eff6ff;
-          color: #1d4ed8;
+          background: #1b2436;
+          color: #9db4e8;
         }
 
         .status-progress {
-          background: #f0fdf4;
-          color: #15803d;
+          background: #2a2110;
+          color: #ffb224;
         }
 
         .status-resolved {
-          background: #ecfdf3;
-          color: #027a48;
+          background: #132818;
+          color: #63cf77;
         }
 
         .status-escalated {
-          background: #fef3f2;
-          color: #b42318;
+          background: #2f1420;
+          color: #f27fa5;
         }
 
         .status-breached {
-          background: #fff1f2;
-          color: #be123c;
+          background: #2f1416;
+          color: #ff8a8e;
         }
 
         .assignment-sla {
@@ -669,29 +671,29 @@ export default function AdminAssignments() {
         }
 
         .assignment-sla small {
-          color: #667085;
+          color: var(--text-muted);
           font-size: 11px;
           white-space: nowrap;
         }
 
         .sla-not-set {
-          background: #f2f4f7;
-          color: #667085;
+          background: #1d222b;
+          color: #8a93a0;
         }
 
         .sla-active {
-          background: #ecfdf3;
-          color: #027a48;
+          background: #132818;
+          color: #63cf77;
         }
 
         .sla-overdue {
-          background: #fff7ed;
-          color: #c2410c;
+          background: #241d12;
+          color: #d9a253;
         }
 
         .sla-breached {
-          background: #fef3f2;
-          color: #b42318;
+          background: #2f1416;
+          color: #ff8a8e;
         }
 
         .admin-empty-state {
@@ -701,12 +703,12 @@ export default function AdminAssignments() {
 
         .admin-empty-state h3 {
           margin: 0 0 8px;
-          color: #101828;
+          color: var(--text);
         }
 
         .admin-empty-state p {
           margin: 0;
-          color: #667085;
+          color: var(--text-muted);
         }
 
         .admin-loading {
@@ -714,7 +716,7 @@ export default function AdminAssignments() {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #667085;
+          color: var(--text-muted);
           font-size: 16px;
         }
 

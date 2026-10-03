@@ -1,17 +1,58 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import api from "../../api/axios";
+import CommentsSection from "../../components/CommentsSection";
+import IssueChat from "../../components/IssueChat";
+import PhotoGallery from "../../components/PhotoGallery";
+import {
+  EmergencyBanner,
+  ChronicBadge,
+  ExpectedFix,
+} from "../../components/IssueExtras";
 
 export default function ComplaintDetails() {
   const { id } = useParams();
+  const navigate = useNavigate();
 
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState("");
+
+  async function handleWithdraw() {
+    if (
+      !window.confirm(
+        "Withdraw this report? This cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    setWithdrawing(true);
+    setWithdrawError("");
+
+    try {
+      await api.delete(`/complaints/${id}`);
+
+      navigate("/citizen/complaints");
+    } catch (error) {
+      setWithdrawError(
+        error.response?.data?.message ||
+          "Unable to withdraw the complaint."
+      );
+      setWithdrawing(false);
+    }
+  }
 
   const [showVerification, setShowVerification] = useState(false);
   const [approved, setApproved] = useState(null);
   const [note, setNote] = useState("");
+  const [stars, setStars] = useState(0);
   const [verifying, setVerifying] = useState(false);
 
   const [verificationError, setVerificationError] = useState("");
@@ -94,6 +135,10 @@ export default function ComplaintDetails() {
         {
           approved,
           note,
+          stars:
+            approved && stars > 0
+              ? stars
+              : undefined,
         }
       );
 
@@ -120,11 +165,9 @@ export default function ComplaintDetails() {
   if (loading) {
     return (
       <div className="page">
-        <div className="empty-state">
-          <h2>Loading complaint...</h2>
-          <p>
-            Please wait while we load the complaint details.
-          </p>
+        <div className="loading-block">
+          <span className="spinner" />
+          <span>Loading complaint…</span>
         </div>
       </div>
     );
@@ -135,7 +178,7 @@ export default function ComplaintDetails() {
       <div className="page">
         <div className="page-header">
           <Link to="/citizen/complaints">
-            ← Back to My Complaints
+            ‹ Back to My Complaints
           </Link>
 
           <p className="eyebrow">CIVICFIX</p>
@@ -156,7 +199,7 @@ export default function ComplaintDetails() {
     <div className="page">
       <div className="page-header">
         <Link to="/citizen/complaints">
-          ← Back to My Complaints
+          ‹ Back to My Complaints
         </Link>
       </div>
 
@@ -170,6 +213,8 @@ export default function ComplaintDetails() {
           COMPLAINT HEADER
       ===================================================== */}
 
+      <EmergencyBanner issue={issue} />
+
       <section className="details-header">
         <div className="details-header-content">
           <p className="eyebrow">
@@ -182,7 +227,8 @@ export default function ComplaintDetails() {
 
           <p>
             Submitted on{" "}
-            {formatDate(complaint.createdAt)}
+            {formatDate(complaint.createdAt)}{" "}
+            <ChronicBadge issue={issue} />
           </p>
         </div>
 
@@ -191,8 +237,10 @@ export default function ComplaintDetails() {
         </span>
       </section>
 
+      {issue && <ExpectedFix issue={issue} />}
+
       {/* =====================================================
-          REPORTED IMAGE
+          REPORTED MEDIA
       ===================================================== */}
 
       {complaint.imageUrl && (
@@ -202,14 +250,32 @@ export default function ComplaintDetails() {
               EVIDENCE
             </p>
 
-            <h2>Reported Image</h2>
+            <h2>
+              Reported{" "}
+              {complaint.photos?.length > 1
+                ? "Photos"
+                : "Image"}
+            </h2>
           </div>
 
-          <img
-            src={complaint.imageUrl}
+          <PhotoGallery
+            photos={
+              complaint.photos?.length
+                ? complaint.photos
+                : [complaint.imageUrl]
+            }
             alt="Reported civic issue"
-            className="complaint-image"
           />
+
+          {complaint.audioUrl && (
+            <div className="voice-note-row">
+              <span>🎙 Voice note</span>
+              <audio
+                controls
+                src={complaint.audioUrl}
+              />
+            </div>
+          )}
         </section>
       )}
 
@@ -446,6 +512,14 @@ export default function ComplaintDetails() {
                           "Status updated."}
                       </p>
 
+                      {history.imageUrl && (
+                        <img
+                          className="timeline-photo"
+                          src={history.imageUrl}
+                          alt="Photo attached to this update"
+                        />
+                      )}
+
                       <small>
                         {formatDate(
                           history.createdAt
@@ -486,6 +560,28 @@ export default function ComplaintDetails() {
             the civic issue has actually been fixed.
           </p>
 
+          {issue?.resolutionImageUrl && (
+            <div className="proof-compare">
+              <figure>
+                <img
+                  src={complaint.imageUrl}
+                  alt="The issue as originally reported"
+                />
+                <figcaption>Your report</figcaption>
+              </figure>
+
+              <figure>
+                <img
+                  src={issue.resolutionImageUrl}
+                  alt="The completed work photographed by the authority"
+                />
+                <figcaption>
+                  After the work
+                </figcaption>
+              </figure>
+            </div>
+          )}
+
           {!showVerification && (
             <div className="verification-actions">
               <button
@@ -515,6 +611,44 @@ export default function ComplaintDetails() {
               onSubmit={handleVerification}
               className="verification-form"
             >
+              {approved && (
+                <div className="form-group">
+                  <label>
+                    How satisfied are you with the fix?
+                  </label>
+
+                  <div
+                    className="star-input"
+                    role="radiogroup"
+                    aria-label="Satisfaction rating"
+                  >
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={
+                          value <= stars
+                            ? "star-button star-on"
+                            : "star-button"
+                        }
+                        onClick={() =>
+                          setStars(value)
+                        }
+                        aria-label={`${value} star${value > 1 ? "s" : ""}`}
+                      >
+                        ★
+                      </button>
+                    ))}
+
+                    {stars > 0 && (
+                      <span className="star-label">
+                        {stars}/5
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="verification-form-header">
                 <h3>
                   {approved
@@ -590,6 +724,47 @@ export default function ComplaintDetails() {
             </form>
           )}
         </section>
+      )}
+
+      {issue &&
+        ["REPORTED", "AI_VERIFIED"].includes(
+          issue.status
+        ) &&
+        !issue.assignments?.some(
+          (assignment) => !assignment.completedAt
+        ) && (
+          <section className="details-card">
+            <h2>Withdraw this report</h2>
+
+            <p className="verification-intro">
+              Filed by mistake, or already fixed? You
+              can withdraw this report while no
+              authority has started working on it.
+            </p>
+
+            {withdrawError && (
+              <div className="form-error">
+                {withdrawError}
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="verification-danger-button"
+              onClick={handleWithdraw}
+              disabled={withdrawing}
+            >
+              {withdrawing
+                ? "Withdrawing…"
+                : "Withdraw report"}
+            </button>
+          </section>
+        )}
+
+      {issue && <IssueChat issueId={issue.id} />}
+
+      {issue && (
+        <CommentsSection issueId={issue.id} />
       )}
     </div>
   );

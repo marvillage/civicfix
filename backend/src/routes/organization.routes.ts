@@ -10,6 +10,8 @@ import {
   createWardController,
   getWardsController,
   getAuthoritiesController,
+  getCategoryRulesController,
+  setCategoryRuleController,
 } from "../controllers/organization.controller";
 
 const router = Router();
@@ -29,6 +31,12 @@ router.get(
   "/departments",
   authenticate,
   authorizeRoles("ADMIN", "AUTHORITY"),
+  getDepartmentsController
+);
+
+// Public: needed by the authority signup form
+router.get(
+  "/public-departments",
   getDepartmentsController
 );
 
@@ -59,6 +67,24 @@ router.get(
   authenticate,
   authorizeRoles("ADMIN"),
   getAuthoritiesController
+);
+
+// ─────────────────────────────────────────────────
+// AUTO-ASSIGNMENT RULES
+// ─────────────────────────────────────────────────
+
+router.get(
+  "/rules",
+  authenticate,
+  authorizeRoles("ADMIN"),
+  getCategoryRulesController
+);
+
+router.put(
+  "/rules",
+  authenticate,
+  authorizeRoles("ADMIN"),
+  setCategoryRuleController
 );
 
 export default router;

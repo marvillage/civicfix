@@ -55,9 +55,36 @@ export default function Register() {
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
-        <div className="auth-header">
-          <h1>CivicFix</h1>
+      <aside className="auth-art">
+        <div className="auth-art-caption">
+          <p className="auth-art-eyebrow">CIVICFIX</p>
+
+          <h2>
+            Every fixed street started with one
+            report.
+          </h2>
+
+          <p>
+            Earn civic points and badges, climb the
+            ward leaderboard, and watch your
+            neighbourhood actually improve.
+          </p>
+        </div>
+      </aside>
+
+      <div className="auth-panel">
+        <div className="auth-card">
+          <Link to="/" className="auth-brand">
+            <img
+              className="brand-icon"
+              src="/images/logo-icon.png"
+              alt=""
+            />
+            CivicFix
+          </Link>
+
+          <div className="auth-header">
+            <h1>Join CivicFix</h1>
 
           <p>
             Create your account and start improving
@@ -131,12 +158,19 @@ export default function Register() {
           </button>
         </form>
 
-        <p className="auth-switch">
-          Already have an account?{" "}
-          <Link to="/login">
-            Sign in
-          </Link>
-        </p>
+          <p className="auth-switch">
+            Already have an account?{" "}
+            <Link to="/login">Sign in</Link>
+          </p>
+
+          <p className="auth-alt">
+            Municipal staff?{" "}
+            <Link to="/register/authority">
+              Register as an authority
+            </Link>{" "}
+            — requires a government ID.
+          </p>
+        </div>
       </div>
     </div>
   );

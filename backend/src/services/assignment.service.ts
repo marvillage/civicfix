@@ -1,5 +1,8 @@
 import { prisma } from "../lib/prisma";
-import { createNotification } from "./notification.service";
+import {
+  createNotification,
+  notifyIssueWatchers,
+} from "./notification.service";
 
 interface CreateAssignmentData {
   issueId: string;
@@ -220,6 +223,10 @@ export async function acceptAssignment(
       });
 
       for (const complaint of assignment.issue.complaints) {
+        if (!complaint.citizenId) {
+          continue;
+        }
+
         await tx.notification.create({
           data: {
             userId: complaint.citizenId,
@@ -231,6 +238,13 @@ export async function acceptAssignment(
 
       return updatedAssignment;
     }
+  );
+
+  await notifyIssueWatchers(
+    assignment.issueId,
+    "Issue Acknowledged",
+    `"${assignment.issue.title}" has been acknowledged by the assigned authority.`,
+    { excludeComplainants: true }
   );
 
   return result;
@@ -301,6 +315,10 @@ export async function startAssignment(
       });
 
       for (const complaint of assignment.issue.complaints) {
+        if (!complaint.citizenId) {
+          continue;
+        }
+
         await tx.notification.create({
           data: {
             userId: complaint.citizenId,
@@ -314,13 +332,71 @@ export async function startAssignment(
     }
   );
 
+  await notifyIssueWatchers(
+    assignment.issueId,
+    "Work Started",
+    `Work has started on "${assignment.issue.title}".`,
+    { excludeComplainants: true }
+  );
+
   return result;
+}
+
+// ─────────────────────────────────────────────
+// PROGRESS UPDATE — mid-work note + photo
+// ─────────────────────────────────────────────
+
+export async function addProgressUpdate(
+  assignmentId: string,
+  authorityId: string,
+  note: string,
+  imageUrl?: string
+) {
+  const assignment = await prisma.assignment.findUnique({
+    where: {
+      id: assignmentId,
+    },
+    include: {
+      issue: true,
+    },
+  });
+
+  if (!assignment) {
+    throw new Error("ASSIGNMENT_NOT_FOUND");
+  }
+
+  if (assignment.authorityId !== authorityId) {
+    throw new Error("NOT_ASSIGNED_AUTHORITY");
+  }
+
+  if (assignment.issue.status !== "IN_PROGRESS") {
+    throw new Error("INVALID_STATUS");
+  }
+
+  const entry = await prisma.statusHistory.create({
+    data: {
+      issueId: assignment.issueId,
+      changedBy: authorityId,
+      status: "IN_PROGRESS",
+      note,
+      imageUrl,
+    },
+  });
+
+  await notifyIssueWatchers(
+    assignment.issueId,
+    "Progress Update",
+    `Update on "${assignment.issue.title}": ${note}`
+  );
+
+  return entry;
 }
 
 export async function resolveAssignment(
   assignmentId: string,
   authorityId: string,
-  note?: string
+  note?: string,
+  resolutionImageUrl?: string
 ) {
   const assignment = await prisma.assignment.findUnique({
     where: {
@@ -373,6 +449,9 @@ export async function resolveAssignment(
         },
         data: {
           status: "RESOLVED",
+          ...(resolutionImageUrl
+            ? { resolutionImageUrl }
+            : {}),
         },
       });
 
@@ -388,6 +467,10 @@ export async function resolveAssignment(
       });
 
       for (const complaint of assignment.issue.complaints) {
+        if (!complaint.citizenId) {
+          continue;
+        }
+
         await tx.notification.create({
           data: {
             userId: complaint.citizenId,
@@ -399,6 +482,13 @@ export async function resolveAssignment(
 
       return updatedAssignment;
     }
+  );
+
+  await notifyIssueWatchers(
+    assignment.issueId,
+    "Issue Resolved",
+    `"${assignment.issue.title}" has been marked as resolved.`,
+    { excludeComplainants: true }
   );
 
   return result;

@@ -5,7 +5,80 @@ import {
   createWard,
   getWards,
   getAuthorities,
+  getCategoryRules,
+  setCategoryRule,
 } from "../services/organization.service";
+
+const VALID_RULE_CATEGORIES = [
+  "ROAD_DAMAGE",
+  "STREETLIGHT",
+  "GARBAGE",
+  "WATER_LEAKAGE",
+  "DRAINAGE",
+  "OTHER",
+];
+
+export async function getCategoryRulesController(
+  _req: Request,
+  res: Response
+) {
+  try {
+    const rules = await getCategoryRules();
+
+    return res.status(200).json({ rules });
+  } catch (error) {
+    console.error("Get rules error:", error);
+
+    return res.status(500).json({
+      message: "Something went wrong while fetching rules",
+    });
+  }
+}
+
+export async function setCategoryRuleController(
+  req: Request,
+  res: Response
+) {
+  try {
+    const { category, departmentId } = req.body;
+
+    if (
+      !category ||
+      !VALID_RULE_CATEGORIES.includes(category)
+    ) {
+      return res.status(400).json({
+        message: "A valid issue category is required",
+      });
+    }
+
+    const rule = await setCategoryRule(
+      category,
+      departmentId || null
+    );
+
+    return res.status(200).json({
+      message: rule
+        ? "Rule saved"
+        : "Rule removed",
+      rule,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "DEPARTMENT_NOT_FOUND"
+    ) {
+      return res.status(404).json({
+        message: "Department not found",
+      });
+    }
+
+    console.error("Set rule error:", error);
+
+    return res.status(500).json({
+      message: "Something went wrong while saving the rule",
+    });
+  }
+}
 
 // ─────────────────────────────────────────────
 // DEPARTMENTS

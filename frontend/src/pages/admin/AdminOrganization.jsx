@@ -2,9 +2,19 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/axios";
 
+const RULE_CATEGORIES = [
+  "ROAD_DAMAGE",
+  "STREETLIGHT",
+  "GARBAGE",
+  "WATER_LEAKAGE",
+  "DRAINAGE",
+  "OTHER",
+];
+
 export default function AdminOrganization() {
   const [departments, setDepartments] = useState([]);
   const [wards, setWards] = useState([]);
+  const [rules, setRules] = useState([]);
 
   const [departmentName, setDepartmentName] = useState("");
   const [wardName, setWardName] = useState("");
@@ -21,10 +31,11 @@ export default function AdminOrganization() {
     try {
       setError("");
 
-      const [departmentResponse, wardResponse] =
+      const [departmentResponse, wardResponse, rulesResponse] =
         await Promise.all([
           api.get("/organization/departments"),
           api.get("/organization/wards"),
+          api.get("/organization/rules"),
         ]);
 
       setDepartments(
@@ -34,6 +45,8 @@ export default function AdminOrganization() {
       setWards(
         wardResponse.data.wards || []
       );
+
+      setRules(rulesResponse.data.rules || []);
     } catch (error) {
       console.error(
         "Fetch organization data error:",
@@ -161,7 +174,7 @@ export default function AdminOrganization() {
       <div className="page">
         <div className="page-header">
           <Link to="/admin">
-            ← Back to Dashboard
+            ‹ Back to Dashboard
           </Link>
 
           <h1>Departments & Wards</h1>
@@ -181,7 +194,7 @@ export default function AdminOrganization() {
     <div className="page">
       <div className="page-header">
         <Link to="/admin">
-          ← Back to Dashboard
+          ‹ Back to Dashboard
         </Link>
 
         <p className="eyebrow">
@@ -372,6 +385,102 @@ export default function AdminOrganization() {
                 </strong>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      <section className="details-card">
+        <p className="eyebrow">AUTOMATION</p>
+
+        <h2>Auto-assignment rules</h2>
+
+        <p className="verification-intro">
+          Map an issue category to a department and
+          every new report in that category is routed
+          there automatically.
+        </p>
+
+        {departments.length === 0 ? (
+          <p>
+            Create a department first, then set up
+            rules.
+          </p>
+        ) : (
+          <div className="rules-list">
+            {RULE_CATEGORIES.map((category) => {
+              const rule = rules.find(
+                (rule) => rule.category === category
+              );
+
+              return (
+                <div
+                  className="stats-list-item"
+                  key={category}
+                >
+                  <span>
+                    {category
+                      .replace(/_/g, " ")
+                      .toLowerCase()
+                      .replace(/\b\w/g, (char) =>
+                        char.toUpperCase()
+                      )}
+                  </span>
+
+                  <select
+                    className="rule-select"
+                    value={
+                      rule?.department?.id || ""
+                    }
+                    onChange={async (event) => {
+                      try {
+                        setError("");
+
+                        await api.put(
+                          "/organization/rules",
+                          {
+                            category,
+                            departmentId:
+                              event.target.value ||
+                              null,
+                          }
+                        );
+
+                        const response =
+                          await api.get(
+                            "/organization/rules"
+                          );
+
+                        setRules(
+                          response.data.rules || []
+                        );
+
+                        setSuccess("Rule saved.");
+                      } catch (error) {
+                        setError(
+                          error.response?.data
+                            ?.message ||
+                            "Unable to save the rule."
+                        );
+                      }
+                    }}
+                  >
+                    <option value="">
+                      No auto-routing
+                    </option>
+                    {departments.map(
+                      (department) => (
+                        <option
+                          key={department.id}
+                          value={department.id}
+                        >
+                          {department.name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>

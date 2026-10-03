@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import api from "../../api/axios";
+import api, { issueShareUrl } from "../../api/axios";
+import CommentsSection from "../../components/CommentsSection";
+import PhotoGallery from "../../components/PhotoGallery";
+import {
+  EmergencyBanner,
+  ChronicBadge,
+  ExpectedFix,
+  VoiceNotes,
+} from "../../components/IssueExtras";
 
 export default function PublicIssueDetails() {
   const { id } = useParams();
@@ -13,6 +21,7 @@ export default function PublicIssueDetails() {
   const [upvoting, setUpvoting] = useState(false);
   const [upvoteMessage, setUpvoteMessage] = useState("");
   const [upvoteError, setUpvoteError] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
 
   useEffect(() => {
     async function fetchIssue() {
@@ -140,7 +149,7 @@ export default function PublicIssueDetails() {
           </div>
 
           <Link to="/issues">
-            ← Back to Public Issues
+            ‹ Back to Public Issues
           </Link>
         </main>
       </div>
@@ -171,7 +180,7 @@ export default function PublicIssueDetails() {
 
       <main className="dashboard-content">
         <Link to="/issues">
-          ← Back to Public Issues
+          ‹ Back to Public Issues
         </Link>
 
         <section className="welcome-section">
@@ -184,13 +193,16 @@ export default function PublicIssueDetails() {
           </p>
         </section>
 
+        <EmergencyBanner issue={issue} />
+
         <section className="complaint-card">
           <div className="complaint-card-header">
             <div>
               <h2>Issue Information</h2>
 
               <p>
-                {formatStatus(issue.category)}
+                {formatStatus(issue.category)}{" "}
+                <ChronicBadge issue={issue} />
               </p>
             </div>
 
@@ -200,6 +212,20 @@ export default function PublicIssueDetails() {
               {formatStatus(issue.status)}
             </span>
           </div>
+
+          <PhotoGallery
+            photos={(issue.complaints || []).flatMap(
+              (complaint) =>
+                complaint.photos?.length
+                  ? complaint.photos
+                  : [complaint.imageUrl]
+            )}
+            alt={issue.title}
+          />
+
+          <VoiceNotes complaints={issue.complaints} />
+
+          <ExpectedFix issue={issue} />
 
           <p className="complaint-description">
             {issue.description ||
@@ -226,7 +252,7 @@ export default function PublicIssueDetails() {
             </p>
           )}
 
-          <div>
+          <div className="issue-actions-row">
             <button
               type="button"
               onClick={handleUpvote}
@@ -237,7 +263,48 @@ export default function PublicIssueDetails() {
                 ? "Upvoting..."
                 : "👍 Upvote Issue"}
             </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={async () => {
+                const shareUrl = issueShareUrl(issue.id);
+
+                try {
+                  await navigator.clipboard.writeText(
+                    shareUrl
+                  );
+                  setShareMessage("Link copied ✓");
+                } catch {
+                  setShareMessage(shareUrl);
+                }
+
+                setTimeout(
+                  () => setShareMessage(""),
+                  2500
+                );
+              }}
+            >
+              🔗 Copy link
+            </button>
+
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(
+                `${issue.title} — reported on CivicFix. Upvote it: ${issueShareUrl(issue.id)}`
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+              className="secondary-button share-anchor"
+            >
+              Share on WhatsApp
+            </a>
           </div>
+
+          {shareMessage && (
+            <p className="detail-label">
+              {shareMessage}
+            </p>
+          )}
 
           {upvoteMessage && (
             <p>
@@ -394,11 +461,39 @@ export default function PublicIssueDetails() {
                       {history.note}
                     </p>
                   )}
+
+                  {history.imageUrl && (
+                    <img
+                      className="timeline-photo"
+                      src={history.imageUrl}
+                      alt="Photo attached to this update"
+                    />
+                  )}
                 </div>
               ))}
             </div>
           )}
         </section>
+
+        {issue.resolutionImageUrl && (
+          <section className="recent-section">
+            <div className="section-header">
+              <div>
+                <p className="eyebrow">PROOF OF WORK</p>
+
+                <h2>Resolution photo</h2>
+              </div>
+            </div>
+
+            <img
+              className="complaint-image"
+              src={issue.resolutionImageUrl}
+              alt="Photo of the completed work"
+            />
+          </section>
+        )}
+
+        <CommentsSection issueId={issue.id} />
       </main>
     </div>
   );

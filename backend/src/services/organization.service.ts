@@ -34,6 +34,70 @@ export async function getDepartments() {
 }
 
 // ─────────────────────────────────────────────
+// AUTO-ASSIGNMENT RULES
+// ─────────────────────────────────────────────
+
+export async function getCategoryRules() {
+  return prisma.categoryRule.findMany({
+    include: {
+      department: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: {
+      category: "asc",
+    },
+  });
+}
+
+export async function setCategoryRule(
+  category: string,
+  departmentId: string | null
+) {
+  if (!departmentId) {
+    await prisma.categoryRule.deleteMany({
+      where: {
+        category: category as any,
+      },
+    });
+
+    return null;
+  }
+
+  const department = await prisma.department.findUnique({
+    where: { id: departmentId },
+  });
+
+  if (!department) {
+    throw new Error("DEPARTMENT_NOT_FOUND");
+  }
+
+  return prisma.categoryRule.upsert({
+    where: {
+      category: category as any,
+    },
+    create: {
+      category: category as any,
+      departmentId,
+    },
+    update: {
+      departmentId,
+    },
+    include: {
+      department: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────
 // WARDS
 // ─────────────────────────────────────────────
 

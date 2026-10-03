@@ -4,9 +4,84 @@ import {
   acceptAssignment,
   startAssignment,
   resolveAssignment,
+  addProgressUpdate,
   getMyAssignments,
   getAllAssignments,
 } from "../services/assignment.service";
+import { uploadImage } from "../services/image.service";
+
+// PROGRESS UPDATE
+export async function addProgressUpdateController(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Authentication required",
+      });
+    }
+
+    const { assignmentId } = req.params;
+    const { note } = req.body;
+
+    if (!note || !note.trim()) {
+      return res.status(400).json({
+        message: "A progress note is required",
+      });
+    }
+
+    let imageUrl: string | undefined;
+
+    if (req.file) {
+      imageUrl = await uploadImage(
+        req.file.buffer,
+        "civicfix/progress"
+      );
+    }
+
+    const entry = await addProgressUpdate(
+      assignmentId,
+      req.user.userId,
+      note.trim(),
+      imageUrl
+    );
+
+    return res.status(201).json({
+      message: "Progress update posted",
+      entry,
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "ASSIGNMENT_NOT_FOUND") {
+        return res.status(404).json({
+          message: "Assignment not found",
+        });
+      }
+
+      if (error.message === "NOT_ASSIGNED_AUTHORITY") {
+        return res.status(403).json({
+          message:
+            "You are not the authority assigned to this issue",
+        });
+      }
+
+      if (error.message === "INVALID_STATUS") {
+        return res.status(400).json({
+          message:
+            "Progress updates can only be posted while work is in progress",
+        });
+      }
+    }
+
+    console.error("Progress update error:", error);
+
+    return res.status(500).json({
+      message:
+        "Something went wrong while posting the progress update",
+    });
+  }
+}
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -226,10 +301,20 @@ export async function resolveAssignmentController(
     const { assignmentId } = req.params;
     const { note } = req.body;
 
+    let resolutionImageUrl: string | undefined;
+
+    if (req.file) {
+      resolutionImageUrl = await uploadImage(
+        req.file.buffer,
+        "civicfix/resolutions"
+      );
+    }
+
     const assignment = await resolveAssignment(
       assignmentId,
       req.user.userId,
-      note
+      note,
+      resolutionImageUrl
     );
 
     return res.status(200).json({

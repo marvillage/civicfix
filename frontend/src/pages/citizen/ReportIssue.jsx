@@ -1,28 +1,113 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import api from "../../api/axios";
+import VoiceRecorder from "../../components/VoiceRecorder";
+import SuccessCheck from "../../components/SuccessCheck";
 
 export default function ReportIssue() {
   const navigate = useNavigate();
 
-  const [image, setImage] = useState(null);
+  const [images, setImages] = useState([]);
+  const [voiceNote, setVoiceNote] = useState(null);
+  const [isEmergency, setIsEmergency] = useState(false);
   const [description, setDescription] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [address, setAddress] = useState("");
+
+  const [nearby, setNearby] = useState([]);
+  const [upvoted, setUpvoted] = useState({});
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  function handleImageChange(event) {
-    const file = event.target.files?.[0];
+  useEffect(() => {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
 
-    if (!file) {
-      setImage(null);
+    if (
+      !latitude ||
+      !longitude ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng)
+    ) {
+      setAddress("");
+      setNearby([]);
       return;
     }
 
-    setImage(file);
+    let cancelled = false;
+
+    const timer = setTimeout(async () => {
+      try {
+        const [geo, near] = await Promise.all([
+          api.get("/geocode", {
+            params: { lat, lng },
+          }),
+          api.get("/issues/nearby", {
+            params: { lat, lng },
+          }),
+        ]);
+
+        if (!cancelled) {
+          setAddress(geo.data.address || "");
+          setNearby(near.data.issues || []);
+        }
+      } catch (error) {
+        console.error(
+          "Location lookup error:",
+          error
+        );
+      }
+    }, 600);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [latitude, longitude]);
+
+  async function handleUpvote(issueId) {
+    try {
+      await api.post(`/issues/${issueId}/upvote`);
+
+      setUpvoted((previous) => ({
+        ...previous,
+        [issueId]: true,
+      }));
+    } catch (error) {
+      const message =
+        error.response?.data?.message || "";
+
+      if (message.toLowerCase().includes("already")) {
+        setUpvoted((previous) => ({
+          ...previous,
+          [issueId]: true,
+        }));
+      } else {
+        setError(
+          message || "Unable to upvote the issue."
+        );
+      }
+    }
+  }
+
+  function formatStatus(status) {
+    return (
+      status
+        ?.replace(/_/g, " ")
+        .toLowerCase()
+        .replace(/\b\w/g, (char) =>
+          char.toUpperCase()
+        ) || "Unknown"
+    );
+  }
+
+  function handleImageChange(event) {
+    setImages(
+      [...(event.target.files || [])].slice(0, 5)
+    );
   }
 
   function getLocation() {
@@ -59,8 +144,8 @@ export default function ReportIssue() {
     setError("");
     setSuccess("");
 
-    if (!image) {
-      setError("Please select an image.");
+    if (images.length === 0) {
+      setError("Please select at least one photo.");
       return;
     }
 
@@ -73,7 +158,18 @@ export default function ReportIssue() {
 
     const formData = new FormData();
 
-    formData.append("image", image);
+    images.forEach((file) =>
+      formData.append("images", file)
+    );
+
+    if (voiceNote) {
+      formData.append("audio", voiceNote);
+    }
+
+    formData.append(
+      "isEmergency",
+      isEmergency ? "true" : "false"
+    );
     formData.append(
       "description",
       description
@@ -106,7 +202,7 @@ export default function ReportIssue() {
 
       setTimeout(() => {
         navigate("/citizen/complaints");
-      }, 1200);
+      }, 1900);
     } catch (error) {
       console.error(
         "Complaint submission error:",
@@ -126,6 +222,15 @@ export default function ReportIssue() {
   return (
     <div className="page">
       <div className="form-container">
+        <img
+          className="report-hero"
+          src="/images/report-dusk.png"
+          alt="Hands photographing a broken streetlight at dusk"
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+        />
+
         <div className="page-header">
           <button
             type="button"
@@ -133,7 +238,7 @@ export default function ReportIssue() {
               navigate("/citizen")
             }
           >
-            ← Back
+            ‹ Back
           </button>
 
           <h1>Report an Issue</h1>
@@ -150,23 +255,56 @@ export default function ReportIssue() {
         >
           <div className="form-group">
             <label htmlFor="image">
-              Issue Image
+              Photos (up to 5)
             </label>
 
             <input
               id="image"
               type="file"
               accept="image/*"
+              multiple
               onChange={handleImageChange}
               required
             />
 
-            {image && (
+            {images.length > 0 && (
               <p>
-                Selected: {image.name}
+                {images.length} photo
+                {images.length > 1 ? "s" : ""}{" "}
+                selected
               </p>
             )}
           </div>
+
+          <div className="form-group">
+            <label>
+              Voice note (optional)
+            </label>
+
+            <VoiceRecorder onChange={setVoiceNote} />
+          </div>
+
+          <label className="emergency-toggle">
+            <input
+              type="checkbox"
+              checked={isEmergency}
+              onChange={(event) =>
+                setIsEmergency(event.target.checked)
+              }
+            />
+
+            <span>
+              <strong>
+                🚨 This is an emergency
+              </strong>
+              <small>
+                Life-threatening hazard — open
+                manhole, live wire, major flooding.
+                Alerts every admin instantly and
+                jumps the queue.
+              </small>
+            </span>
+          </label>
 
           <div className="form-group">
             <label htmlFor="description">
@@ -244,7 +382,68 @@ export default function ReportIssue() {
                 />
               </div>
             </div>
+
+            {address && (
+              <p className="location-address">
+                📍 {address}
+              </p>
+            )}
           </div>
+
+          {nearby.length > 0 && (
+            <div className="nearby-panel">
+              <h3>
+                Already reported near this spot?
+              </h3>
+
+              <p>
+                Upvoting an existing report raises its
+                priority faster than filing a duplicate.
+              </p>
+
+              <div className="nearby-list">
+                {nearby.map((issue) => (
+                  <div
+                    key={issue.id}
+                    className="nearby-item"
+                  >
+                    <div className="nearby-info">
+                      <strong>{issue.title}</strong>
+
+                      <small>
+                        {formatStatus(issue.category)} ·{" "}
+                        {formatStatus(issue.status)} ·{" "}
+                        {issue.distanceMeters} m away ·{" "}
+                        👍 {issue._count?.upvotes || 0}
+                      </small>
+                    </div>
+
+                    <div className="nearby-actions">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleUpvote(issue.id)
+                        }
+                        disabled={upvoted[issue.id]}
+                        className="secondary-button"
+                      >
+                        {upvoted[issue.id]
+                          ? "Upvoted ✓"
+                          : "Upvote"}
+                      </button>
+
+                      <Link
+                        to={`/issues/${issue.id}`}
+                        className="text-link"
+                      >
+                        View
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="form-error">
@@ -252,22 +451,24 @@ export default function ReportIssue() {
             </div>
           )}
 
-          {success && (
-            <div className="form-success">
-              {success}
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={loading}
           >
+            {loading && <span className="spinner" />}
             {loading
               ? "Submitting..."
               : "Submit Complaint"}
           </button>
         </form>
       </div>
+
+      {success && (
+        <SuccessCheck
+          title="Report submitted"
+          message="Thank you for looking out for your neighbourhood. Taking you to your complaints…"
+        />
+      )}
     </div>
   );
 }

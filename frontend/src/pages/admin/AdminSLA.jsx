@@ -191,7 +191,7 @@ export default function AdminSLA() {
     return (
       <div className="page">
         <Link to="/admin">
-          ← Back to Admin Dashboard
+          ‹ Back to Admin Dashboard
         </Link>
 
         <h1>Manage SLA</h1>
@@ -204,7 +204,7 @@ export default function AdminSLA() {
     return (
       <div className="page">
         <Link to="/admin">
-          ← Back to Admin Dashboard
+          ‹ Back to Admin Dashboard
         </Link>
 
         <h1>Manage SLA</h1>
@@ -220,7 +220,7 @@ export default function AdminSLA() {
     <div className="page">
       <div className="page-header">
         <Link to="/admin">
-          ← Back to Admin Dashboard
+          ‹ Back to Admin Dashboard
         </Link>
 
         <p className="eyebrow">

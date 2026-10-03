@@ -64,7 +64,7 @@ export default function MyComplaints() {
     <div className="page">
       <div className="page-header">
         <Link to="/citizen">
-          ← Back to Dashboard
+          ‹ Back to Dashboard
         </Link>
 
         <h1>My Complaints</h1>

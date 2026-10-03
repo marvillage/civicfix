@@ -1,11 +1,15 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware";
-import upload from "../middleware/upload.middleware";
+import { authorizeRoles } from "../middleware/role.middleware";
+import { reportUpload } from "../middleware/upload.middleware";
 import {
   createComplaintController,
+  createAnonymousComplaintController,
+  createFieldReportController,
   getMyComplaintsController,
   getComplaintByIdController,
   verifyComplaintResolutionController,
+  withdrawComplaintController,
 } from "../controllers/complaint.controller";
 
 const router = Router();
@@ -13,8 +17,22 @@ const router = Router();
 router.post(
   "/",
   authenticate,
-  upload.single("image"),
+  reportUpload,
   createComplaintController
+);
+
+router.post(
+  "/anonymous",
+  reportUpload,
+  createAnonymousComplaintController
+);
+
+router.post(
+  "/field",
+  authenticate,
+  authorizeRoles("AUTHORITY", "ADMIN"),
+  reportUpload,
+  createFieldReportController
 );
 
 router.get(
@@ -33,6 +51,12 @@ router.patch(
   "/:complaintId/verify",
   authenticate,
   verifyComplaintResolutionController
+);
+
+router.delete(
+  "/:id",
+  authenticate,
+  withdrawComplaintController
 );
 
 export default router;

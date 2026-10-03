@@ -7,8 +7,18 @@ import {
   getPublicIssuesController,
   getIssueByIdController,
   getAllIssuesController,
+  getNearbyIssuesController,
   updateIssueStatusController,
+  markDuplicateController,
 } from "../controllers/issue.controller";
+import {
+  getIssueCommentsController,
+  createCommentController,
+} from "../controllers/comment.controller";
+import {
+  getIssueMessagesController,
+  sendIssueMessageController,
+} from "../controllers/message.controller";
 
 const router = Router();
 
@@ -33,6 +43,34 @@ router.get(
   getAllIssuesController
 );
 
+router.get(
+  "/nearby",
+  getNearbyIssuesController
+);
+
+router.get(
+  "/:issueId/comments",
+  getIssueCommentsController
+);
+
+router.post(
+  "/:issueId/comments",
+  authenticate,
+  createCommentController
+);
+
+router.get(
+  "/:issueId/messages",
+  authenticate,
+  getIssueMessagesController
+);
+
+router.post(
+  "/:issueId/messages",
+  authenticate,
+  sendIssueMessageController
+);
+
 // ─────────────────────────────────────────────
 // ISSUE BY ID
 // ─────────────────────────────────────────────
@@ -51,6 +89,13 @@ router.patch(
   authenticate,
   authorizeRoles("AUTHORITY", "ADMIN"),
   updateIssueStatusController
+);
+
+router.post(
+  "/:issueId/duplicate",
+  authenticate,
+  authorizeRoles("ADMIN"),
+  markDuplicateController
 );
 
 export default router;

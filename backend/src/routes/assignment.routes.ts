@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware";
 import { authorizeRoles } from "../middleware/role.middleware";
+import upload from "../middleware/upload.middleware";
 import {
   createAssignmentController,
   getMyAssignmentsController,
@@ -8,6 +9,7 @@ import {
   acceptAssignmentController,
   startAssignmentController,
   resolveAssignmentController,
+  addProgressUpdateController,
 } from "../controllers/assignment.controller";
 
 const router = Router();
@@ -52,11 +54,21 @@ router.patch(
   startAssignmentController
 );
 
-// Resolve issue
+// Post a mid-work progress update (note + optional photo)
+router.post(
+  "/:assignmentId/progress",
+  authenticate,
+  authorizeRoles("AUTHORITY", "ADMIN"),
+  upload.single("photo"),
+  addProgressUpdateController
+);
+
+// Resolve issue (optional "proof" photo of the completed work)
 router.patch(
   "/:assignmentId/resolve",
   authenticate,
   authorizeRoles("AUTHORITY", "ADMIN"),
+  upload.single("proof"),
   resolveAssignmentController
 );
 

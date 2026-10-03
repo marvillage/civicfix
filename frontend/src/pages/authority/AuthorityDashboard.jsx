@@ -2,19 +2,74 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/axios";
 import Notifications from "../../components/Notifications";
+import IssueMap from "../../components/IssueMap";
+
+function slaInfo(assignment, now) {
+  const sla = assignment.issue?.sla;
+
+  if (!sla || assignment.completedAt) {
+    return null;
+  }
+
+  if (sla.breached) {
+    return { breached: true, label: "SLA breached" };
+  }
+
+  const remainingMs =
+    new Date(sla.deadline).getTime() - now;
+
+  if (remainingMs <= 0) {
+    return { breached: true, label: "SLA breached" };
+  }
+
+  const hours = Math.floor(remainingMs / 3600000);
+  const minutes = Math.floor(
+    (remainingMs % 3600000) / 60000
+  );
+
+  const label =
+    hours >= 48
+      ? `${Math.floor(hours / 24)}d left`
+      : hours > 0
+        ? `${hours}h ${minutes}m left`
+        : `${minutes}m left`;
+
+  return {
+    breached: false,
+    urgent: remainingMs < 4 * 3600000,
+    remainingMs,
+    label,
+  };
+}
 
 export default function AuthorityDashboard() {
   const [assignments, setAssignments] = useState([]);
+  const [performance, setPerformance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeFilter, setActiveFilter] = useState("ALL");
+  const [view, setView] = useState("list");
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(
+      () => setNow(Date.now()),
+      60000
+    );
+
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     async function fetchAssignments() {
       try {
-        const response = await api.get("/assignments/my");
+        const [assignRes, perfRes] = await Promise.all([
+          api.get("/assignments/my"),
+          api.get("/dashboard/my-performance"),
+        ]);
 
-        setAssignments(response.data.assignments || []);
+        setAssignments(assignRes.data.assignments || []);
+        setPerformance(perfRes.data.performance || null);
       } catch (error) {
         console.error("Fetch assignments error:", error);
 
@@ -87,36 +142,64 @@ export default function AuthorityDashboard() {
       assignment.issue?.status === "RESOLVED"
   ).length;
 
-  const filteredAssignments = assignments.filter((assignment) => {
-    const status = assignment.issue?.status;
+  const filteredAssignments = assignments
+    .filter((assignment) => {
+      const status = assignment.issue?.status;
 
-    if (activeFilter === "PENDING") {
-      return (
-        !assignment.acceptedAt &&
-        !assignment.completedAt &&
-        status !== "RESOLVED"
-      );
-    }
+      if (activeFilter === "PENDING") {
+        return (
+          !assignment.acceptedAt &&
+          !assignment.completedAt &&
+          status !== "RESOLVED"
+        );
+      }
 
-    if (activeFilter === "ACTIVE") {
-      return (
-        !assignment.completedAt &&
-        (
-          status === "ACKNOWLEDGED" ||
-          status === "IN_PROGRESS"
-        )
-      );
-    }
+      if (activeFilter === "ACTIVE") {
+        return (
+          !assignment.completedAt &&
+          (
+            status === "ACKNOWLEDGED" ||
+            status === "IN_PROGRESS"
+          )
+        );
+      }
 
-    if (activeFilter === "RESOLVED") {
-      return (
-        assignment.completedAt ||
-        status === "RESOLVED"
-      );
-    }
+      if (activeFilter === "RESOLVED") {
+        return (
+          assignment.completedAt ||
+          status === "RESOLVED"
+        );
+      }
 
-    return true;
-  });
+      return true;
+    })
+    .sort((a, b) => {
+      // Most urgent first: breached, then nearest
+      // deadline, then no-SLA, completed last.
+      const rank = (assignment) => {
+        if (assignment.completedAt) {
+          return Number.MAX_SAFE_INTEGER;
+        }
+
+        if (assignment.issue?.isEmergency) {
+          return -2;
+        }
+
+        const info = slaInfo(assignment, now);
+
+        if (!info) {
+          return Number.MAX_SAFE_INTEGER - 1;
+        }
+
+        if (info.breached) {
+          return -1;
+        }
+
+        return info.remainingMs;
+      };
+
+      return rank(a) - rank(b);
+    });
 
   function handleFilter(filter) {
     setActiveFilter(filter);
@@ -147,9 +230,9 @@ export default function AuthorityDashboard() {
           <p>Manage and track your assigned civic issues.</p>
         </div>
 
-        <div className="empty-state">
-          <h2>Loading assignments...</h2>
-          <p>Please wait while we fetch your assigned issues.</p>
+        <div className="loading-block">
+          <span className="spinner" />
+          <span>Loading your assignments…</span>
         </div>
       </div>
     );
@@ -157,14 +240,42 @@ export default function AuthorityDashboard() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <p className="eyebrow">AUTHORITY</p>
+      <div className="page-header admin-dash-header">
+        <div>
+          <p className="eyebrow">AUTHORITY</p>
 
-        <h1>Authority Dashboard</h1>
+          <h1>Authority Dashboard</h1>
 
-        <p>
-          Manage and track civic issues assigned to you.
-        </p>
+          <p>
+            Manage and track civic issues assigned to you.
+          </p>
+        </div>
+
+        <div className="issue-card-actions">
+          <Link to="/authority/report">
+            <button type="button">
+              + Log field issue
+            </button>
+          </Link>
+
+          <Link to="/profile">
+            <button
+              type="button"
+              className="secondary-button"
+            >
+              My Profile
+            </button>
+          </Link>
+
+          <Link to="/">
+            <button
+              type="button"
+              className="secondary-button"
+            >
+              ⌂ Home
+            </button>
+          </Link>
+        </div>
       </div>
 
       <section className="stats-grid">
@@ -213,6 +324,46 @@ export default function AuthorityDashboard() {
         </button>
       </section>
 
+      {performance && (
+        <section className="stats-grid insights-grid">
+          <div className="stat-card">
+            <h2>
+              {performance.avgResolutionHours ?? "—"}
+              {performance.avgResolutionHours != null &&
+                "h"}
+            </h2>
+            <p>My avg. resolution time</p>
+          </div>
+
+          <div className="stat-card">
+            <h2>{performance.completedThisMonth}</h2>
+            <p>Resolved this month</p>
+          </div>
+
+          <div className="stat-card">
+            <h2>
+              {performance.slaHitRate ?? "—"}
+              {performance.slaHitRate != null && "%"}
+            </h2>
+            <p>SLA hit rate</p>
+          </div>
+
+          <div className="stat-card">
+            <h2>
+              {performance.avgRating != null
+                ? `★ ${performance.avgRating}`
+                : "—"}
+            </h2>
+            <p>
+              Citizen rating
+              {performance.ratingsCount
+                ? ` (${performance.ratingsCount})`
+                : ""}
+            </p>
+          </div>
+        </section>
+      )}
+
       {error && (
         <div className="form-error">
           {error}
@@ -248,6 +399,28 @@ export default function AuthorityDashboard() {
               </p>
             </div>
 
+            <div className="view-toggle">
+              <button
+                type="button"
+                className={
+                  view === "list" ? "active" : ""
+                }
+                onClick={() => setView("list")}
+              >
+                List
+              </button>
+
+              <button
+                type="button"
+                className={
+                  view === "map" ? "active" : ""
+                }
+                onClick={() => setView("map")}
+              >
+                Map
+              </button>
+            </div>
+
             {activeFilter !== "ALL" && (
               <button
                 type="button"
@@ -258,6 +431,18 @@ export default function AuthorityDashboard() {
               </button>
             )}
           </div>
+
+          {view === "map" &&
+            filteredAssignments.length > 0 && (
+              <IssueMap
+                issues={filteredAssignments
+                  .map(
+                    (assignment) => assignment.issue
+                  )
+                  .filter(Boolean)}
+                linkBase="/authority/issues"
+              />
+            )}
 
           {filteredAssignments.length === 0 ? (
             <div className="empty-state">
@@ -275,7 +460,7 @@ export default function AuthorityDashboard() {
                 View All Assigned Issues
               </button>
             </div>
-          ) : (
+          ) : view === "map" ? null : (
             <div className="complaints-list">
               {filteredAssignments.map((assignment) => {
                 const issue = assignment.issue;
@@ -285,6 +470,7 @@ export default function AuthorityDashboard() {
                 }
 
                 const stage = getAssignmentStage(assignment);
+                const sla = slaInfo(assignment, now);
 
                 return (
                   <Link
@@ -324,6 +510,20 @@ export default function AuthorityDashboard() {
                       <span>
                         {stage}
                       </span>
+
+                      {sla && (
+                        <span
+                          className={`sla-chip ${
+                            sla.breached
+                              ? "sla-chip-breached"
+                              : sla.urgent
+                                ? "sla-chip-urgent"
+                                : ""
+                          }`}
+                        >
+                          ⏱ {sla.label}
+                        </span>
+                      )}
                     </div>
 
                     {(assignment.department ||

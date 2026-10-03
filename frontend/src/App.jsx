@@ -1,18 +1,26 @@
+﻿import { useEffect, useState } from "react";
 import {
   BrowserRouter,
   Link,
-  Navigate,
   Route,
   Routes,
+  useLocation,
 } from "react-router-dom";
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import { DEMO_MODE } from "./api/axios";
+import DemoBadge from "./demo/DemoBadge";
 
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
+import AuthoritySignup from "./pages/auth/AuthoritySignup";
 
 import PublicIssues from "./pages/public/PublicIssues";
 import PublicIssueDetails from "./pages/public/PublicIssueDetails";
+import PublicReport from "./pages/public/PublicReport";
+import PublicStats from "./pages/public/PublicStats";
+import Landing from "./pages/Landing";
+import FieldReport from "./pages/authority/FieldReport";
 
 import CitizenDashboard from "./pages/citizen/CitizenDashboard";
 import ReportIssue from "./pages/citizen/ReportIssue";
@@ -27,25 +35,83 @@ import AdminIssues from "./pages/admin/AdminIssues";
 import AdminOrganization from "./pages/admin/AdminOrganization";
 import AdminSLA from "./pages/admin/AdminSLA";
 import AdminAssignments from "./pages/admin/AdminAssignments";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminAudit from "./pages/admin/AdminAudit";
+import Profile from "./pages/Profile";
 
-function Home() {
+function ThemeManager() {
+  const { pathname } = useLocation();
+
+  const isNightRoute =
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/authority");
+
+  const [dark, setDark] = useState(
+    () =>
+      localStorage.getItem("civicfix_theme") ===
+      "dark"
+  );
+
+  useEffect(() => {
+    if (isNightRoute) {
+      document.documentElement.dataset.theme = "night";
+    } else if (dark) {
+      document.documentElement.dataset.theme = "dark";
+    } else {
+      delete document.documentElement.dataset.theme;
+    }
+  }, [isNightRoute, dark]);
+
+  if (isNightRoute) {
+    return null;
+  }
+
   return (
-    <div className="page">
-      <h1>CivicFix</h1>
+    <button
+      type="button"
+      className="theme-toggle"
+      aria-label={
+        dark
+          ? "Switch to light mode"
+          : "Switch to dark mode"
+      }
+      onClick={() => {
+        const next = !dark;
+
+        setDark(next);
+
+        localStorage.setItem(
+          "civicfix_theme",
+          next ? "dark" : "light"
+        );
+      }}
+    >
+      {dark ? "☀" : "☾"}
+    </button>
+  );
+}
+
+function NotFound() {
+  return (
+    <div className="not-found">
+      <img
+        src="/images/pigeon-404.png"
+        alt="A confused pigeon on a twisted road sign"
+        onError={(event) => {
+          event.currentTarget.style.display = "none";
+        }}
+      />
+
+      <h1>Wrong turn</h1>
 
       <p>
-        Smart civic issue reporting platform.
+        This page doesn't exist. Head back to safer
+        roads.
       </p>
 
-      <div>
-        <Link to="/login">
-          <button type="button">Login</button>
-        </Link>
-
-        <Link to="/register">
-          <button type="button">Register</button>
-        </Link>
-      </div>
+      <Link to="/">
+        <button type="button">Go home</button>
+      </Link>
     </div>
   );
 }
@@ -53,12 +119,14 @@ function Home() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ThemeManager />
+      {DEMO_MODE && <DemoBadge />}
       <Routes>
         {/* PUBLIC */}
 
         <Route
           path="/"
-          element={<Home />}
+          element={<Landing />}
         />
 
         <Route
@@ -72,6 +140,11 @@ export default function App() {
         />
 
         <Route
+          path="/register/authority"
+          element={<AuthoritySignup />}
+        />
+
+        <Route
           path="/issues"
           element={<PublicIssues />}
         />
@@ -80,6 +153,35 @@ export default function App() {
           path="/issues/:id"
           element={<PublicIssueDetails />}
         />
+
+        <Route
+          path="/report"
+          element={<PublicReport />}
+        />
+
+        <Route
+          path="/stats"
+          element={<PublicStats />}
+        />
+
+        {/* ANY LOGGED-IN ROLE */}
+
+        <Route
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                "CITIZEN",
+                "AUTHORITY",
+                "ADMIN",
+              ]}
+            />
+          }
+        >
+          <Route
+            path="/profile"
+            element={<Profile />}
+          />
+        </Route>
 
         {/* CITIZEN */}
 
@@ -132,6 +234,11 @@ export default function App() {
             path="/authority/issues/:id"
             element={<AuthorityIssueDetails />}
           />
+
+          <Route
+            path="/authority/report"
+            element={<FieldReport />}
+          />
         </Route>
 
         {/* ADMIN */}
@@ -167,13 +274,23 @@ export default function App() {
             path="/admin/sla"
             element={<AdminSLA />}
           />
+
+          <Route
+            path="/admin/users"
+            element={<AdminUsers />}
+          />
+
+          <Route
+            path="/admin/audit"
+            element={<AdminAudit />}
+          />
         </Route>
 
         {/* FALLBACK */}
 
         <Route
           path="*"
-          element={<Navigate to="/" replace />}
+          element={<NotFound />}
         />
       </Routes>
     </BrowserRouter>

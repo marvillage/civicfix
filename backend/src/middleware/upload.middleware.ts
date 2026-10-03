@@ -56,4 +56,59 @@ const upload = multer({
   },
 });
 
+const allowedAudioTypes = [
+  "audio/webm",
+  "audio/ogg",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "audio/x-m4a",
+  "audio/aac",
+];
+
+const mediaFileFilter: multer.Options["fileFilter"] = (
+  _req,
+  file,
+  cb
+) => {
+  if (file.fieldname === "audio") {
+    if (
+      allowedAudioTypes.includes(file.mimetype) ||
+      file.mimetype.startsWith("audio/")
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only audio files are allowed for voice notes"));
+    }
+
+    return;
+  }
+
+  const extension = path
+    .extname(file.originalname)
+    .toLowerCase();
+
+  if (
+    allowedImageTypes.includes(file.mimetype) ||
+    allowedExtensions.includes(extension)
+  ) {
+    cb(null, true);
+  } else {
+    cb(new Error("Only image files are allowed"));
+  }
+};
+
+// For report forms: up to 5 photos + one voice note.
+export const reportUpload = multer({
+  storage,
+  fileFilter: mediaFileFilter,
+  limits: {
+    fileSize: 8 * 1024 * 1024,
+  },
+}).fields([
+  { name: "image", maxCount: 1 },
+  { name: "images", maxCount: 5 },
+  { name: "audio", maxCount: 1 },
+]);
+
 export default upload;

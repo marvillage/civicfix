@@ -5,8 +5,14 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js"
+    "build": "prisma generate --config prisma7.config.ts && tsc",
+    "postbuild": "prisma migrate deploy --config prisma7.config.ts",
+    "start": "node dist/server.js",
+    "seed": "tsx prisma/seed.ts",
+    "seed:demo": "tsx prisma/seed-demo.ts"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +30,7 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.3.0",
+    "nodemailer": "^10.0.0",
     "pg": "^8.23.0",
     "prisma": "^7.10.0"
   },
@@ -33,6 +40,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.4.0",
+    "@types/nodemailer": "^8.0.1",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   }

@@ -169,7 +169,7 @@ export default function AdminIssues() {
     return (
       <div className="page">
         <Link to="/admin">
-          ← Back to Admin Dashboard
+          ‹ Back to Admin Dashboard
         </Link>
 
         <h1>Manage Issues</h1>
@@ -182,7 +182,7 @@ export default function AdminIssues() {
     return (
       <div className="page">
         <Link to="/admin">
-          ← Back to Admin Dashboard
+          ‹ Back to Admin Dashboard
         </Link>
 
         <h1>Manage Issues</h1>
@@ -198,7 +198,7 @@ export default function AdminIssues() {
     <div className="page">
       <div className="page-header">
         <Link to="/admin">
-          ← Back to Admin Dashboard
+          ‹ Back to Admin Dashboard
         </Link>
 
         <p className="eyebrow">
@@ -330,6 +330,50 @@ export default function AdminIssues() {
                         {assignment
                           ? "Reassign Authority"
                           : "Assign Authority"}
+                      </button>
+                    )}
+
+                  {issue.status !== "CLOSED" &&
+                    issue.status !== "DUPLICATE" && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        style={{
+                          position: "relative",
+                          zIndex: 30,
+                        }}
+                        onClick={async (event) => {
+                          event.stopPropagation();
+
+                          const originalIssueId =
+                            window.prompt(
+                              "Paste the ID of the ORIGINAL issue this one duplicates:"
+                            );
+
+                          if (!originalIssueId) {
+                            return;
+                          }
+
+                          try {
+                            await api.post(
+                              `/issues/${issue.id}/duplicate`,
+                              {
+                                originalIssueId:
+                                  originalIssueId.trim(),
+                              }
+                            );
+
+                            await fetchData();
+                          } catch (error) {
+                            window.alert(
+                              error.response?.data
+                                ?.message ||
+                                "Unable to mark as duplicate."
+                            );
+                          }
+                        }}
+                      >
+                        Mark Duplicate
                       </button>
                     )}
                 </div>

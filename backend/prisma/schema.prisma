@@ -17,15 +17,33 @@ model User {
   email        String   @unique
   passwordHash String
   role         Role     @default(CITIZEN)
+  points       Int      @default(0)
+
+  avatarUrl    String?
+  bio          String?
+  ward         String?
+
+  // Staff accounts start unverified until an admin approves them
+  isVerified   Boolean  @default(true)
+
+  // Authority-only identity fields
+  employeeId   String?  @unique
+  designation  String?
+  phone        String?
+  departmentId String?
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  department       Department?        @relation(fields: [departmentId], references: [id])
   complaints       Complaint[]
   upvotes          Upvote[]
   statusUpdates    StatusHistory[]
   assignments      Assignment[]       @relation("AssignedOfficer")
   notifications    Notification[]
   verifications    ResolutionVerification[]
+  comments         Comment[]
+  messages         Message[]
 }
 
 // ─────────────────────────────────────────────
@@ -41,11 +59,16 @@ model Issue {
   severity      Severity
   status        IssueStatus  @default(REPORTED)
 
+  isEmergency   Boolean @default(false)
+  reopenCount   Int     @default(0)
+
   latitude      Float
   longitude     Float
   address       String?
 
   aiConfidence  Float?
+
+  resolutionImageUrl String?
 
   departmentId  String?
   wardId        String?
@@ -62,6 +85,8 @@ model Issue {
   sla           SLA?
   escalations   Escalation[]
   verification  ResolutionVerification?
+  comments      Comment[]
+  messages      Message[]
 }
 
 // ─────────────────────────────────────────────
@@ -72,10 +97,12 @@ model Issue {
 model Complaint {
   id          String   @id @default(cuid())
 
-  citizenId   String
+  citizenId   String?
   issueId     String
 
   imageUrl    String
+  photos      String[] @default([])
+  audioUrl    String?
   description String?
 
   latitude    Float
@@ -83,7 +110,7 @@ model Complaint {
 
   createdAt   DateTime @default(now())
 
-  citizen     User   @relation(fields: [citizenId], references: [id])
+  citizen     User?  @relation(fields: [citizenId], references: [id])
   issue       Issue  @relation(fields: [issueId], references: [id])
 }
 
@@ -97,8 +124,26 @@ model Department {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  issues      Issue[]
-  assignments Assignment[]
+  issues        Issue[]
+  assignments   Assignment[]
+  authorities   User[]
+  categoryRules CategoryRule[]
+}
+
+// ─────────────────────────────────────────────
+// AUTO-ASSIGNMENT RULE
+// Maps an issue category to a default department
+// ─────────────────────────────────────────────
+
+model CategoryRule {
+  id           String        @id @default(cuid())
+  category     IssueCategory @unique
+  departmentId String
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -166,6 +211,7 @@ model StatusHistory {
   changedBy String?
   status    IssueStatus
   note      String?
+  imageUrl  String?
   createdAt DateTime    @default(now())
 
   issue     Issue @relation(fields: [issueId], references: [id])
@@ -211,6 +257,23 @@ model Escalation {
 }
 
 // ─────────────────────────────────────────────
+// COMMENT
+// ─────────────────────────────────────────────
+
+model Comment {
+  id        String   @id @default(cuid())
+
+  issueId   String
+  userId    String
+  text      String
+
+  createdAt DateTime @default(now())
+
+  issue     Issue @relation(fields: [issueId], references: [id])
+  user      User  @relation(fields: [userId], references: [id])
+}
+
+// ─────────────────────────────────────────────
 // NOTIFICATION
 // ─────────────────────────────────────────────
 
@@ -240,10 +303,30 @@ model ResolutionVerification {
 
   verified    Boolean
   comment     String?
+  stars       Int?
   createdAt   DateTime @default(now())
 
   issue       Issue @relation(fields: [issueId], references: [id])
   citizen     User  @relation(fields: [citizenId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// MESSAGE
+// Private thread between the complainants and
+// the assigned authority on an issue
+// ─────────────────────────────────────────────
+
+model Message {
+  id        String   @id @default(cuid())
+
+  issueId   String
+  senderId  String
+  text      String
+
+  createdAt DateTime @default(now())
+
+  issue     Issue @relation(fields: [issueId], references: [id])
+  sender    User  @relation(fields: [senderId], references: [id])
 }
 
 // ─────────────────────────────────────────────

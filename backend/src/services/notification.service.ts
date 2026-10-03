@@ -1,17 +1,96 @@
 import { prisma } from "../lib/prisma";
+import { sendEmail } from "./email.service";
 
 export async function createNotification(
   userId: string,
   title: string,
   message: string
 ) {
-  return prisma.notification.create({
+  const notification = await prisma.notification.create({
     data: {
       userId,
       title,
       message,
     },
   });
+
+  prisma.user
+    .findUnique({
+      where: { id: userId },
+      select: { email: true },
+    })
+    .then((user) => {
+      if (user?.email) {
+        return sendEmail(
+          user.email,
+          `CivicFix: ${title}`,
+          message
+        );
+      }
+    })
+    .catch((error) => {
+      console.error(
+        "Notification email failed:",
+        error
+      );
+    });
+
+  return notification;
+}
+
+interface WatcherOptions {
+  excludeComplainants?: boolean;
+  excludeUserId?: string;
+}
+
+// Notifies everyone watching an issue — upvoters and
+// (optionally) complainants — deduplicated.
+export async function notifyIssueWatchers(
+  issueId: string,
+  title: string,
+  message: string,
+  options: WatcherOptions = {}
+) {
+  const [complaints, upvotes] = await Promise.all([
+    prisma.complaint.findMany({
+      where: { issueId },
+      select: { citizenId: true },
+    }),
+    prisma.upvote.findMany({
+      where: { issueId },
+      select: { userId: true },
+    }),
+  ]);
+
+  const complainantIds = new Set(
+    complaints
+      .map((complaint) => complaint.citizenId)
+      .filter((id): id is string => !!id)
+  );
+
+  const recipients = new Set<string>();
+
+  upvotes.forEach((upvote) =>
+    recipients.add(upvote.userId)
+  );
+
+  if (options.excludeComplainants) {
+    complainantIds.forEach((id) =>
+      recipients.delete(id)
+    );
+  } else {
+    complainantIds.forEach((id) =>
+      recipients.add(id)
+    );
+  }
+
+  if (options.excludeUserId) {
+    recipients.delete(options.excludeUserId);
+  }
+
+  for (const userId of recipients) {
+    await createNotification(userId, title, message);
+  }
 }
 
 export async function getUserNotifications(userId: string) {

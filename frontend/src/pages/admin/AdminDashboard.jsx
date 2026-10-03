@@ -2,22 +2,62 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/axios";
 
+function BarList({ rows }) {
+  const max = Math.max(
+    ...rows.map((row) => row.count),
+    1
+  );
+
+  return (
+    <div className="bar-list">
+      {rows.map((row) => (
+        <div className="bar-row" key={row.label}>
+          <span className="bar-label">
+            {row.label}
+          </span>
+
+          <div className="bar-track">
+            <div
+              className="bar-fill"
+              style={{
+                width: `${(row.count / max) * 100}%`,
+              }}
+            />
+          </div>
+
+          <strong className="bar-value">
+            {row.count}
+          </strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [chronic, setChronic] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    async function fetchStats() {
+    async function fetchData() {
       try {
-        const response = await api.get(
-          "/dashboard/stats"
-        );
+        const [statsRes, analyticsRes, chronicRes] =
+          await Promise.all([
+            api.get("/dashboard/stats"),
+            api.get("/dashboard/analytics"),
+            api.get("/dashboard/chronic"),
+          ]);
 
-        setStats(response.data.stats);
+        setStats(statsRes.data.stats);
+        setAnalytics(analyticsRes.data.analytics);
+        setChronic(chronicRes.data.issues || []);
       } catch (error) {
         console.error(
-          "Fetch dashboard stats error:",
+          "Fetch dashboard error:",
           error
         );
 
@@ -30,7 +70,7 @@ export default function AdminDashboard() {
       }
     }
 
-    fetchStats();
+    fetchData();
   }, []);
 
   function formatLabel(value) {
@@ -43,19 +83,53 @@ export default function AdminDashboard() {
       .replace(/^./, (char) =>
         char.toUpperCase()
       )
-      .replace(/_/g, " ");
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  async function handleExport() {
+    setExporting(true);
+
+    try {
+      const response = await api.get(
+        "/dashboard/export/issues.csv",
+        { responseType: "blob" }
+      );
+
+      const url = URL.createObjectURL(
+        response.data
+      );
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `civicfix-issues-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Export error:", error);
+      setError("Unable to export issues.");
+    } finally {
+      setExporting(false);
+    }
   }
 
   if (loading) {
     return (
       <div className="page">
-        <h1>Admin Dashboard</h1>
-        <p>Loading dashboard...</p>
+        <div className="loading-block">
+          <span className="spinner" />
+          <span>Loading dashboard…</span>
+        </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error && !stats) {
     return (
       <div className="page">
         <h1>Admin Dashboard</h1>
@@ -69,22 +143,64 @@ export default function AdminDashboard() {
 
   const status = stats?.status || {};
 
+  const monthly = analytics?.monthly || [];
+  const monthlyMax = Math.max(
+    ...monthly.map((m) => m.count),
+    1
+  );
+
   return (
     <div className="page">
       {/* Header */}
 
-      <div className="page-header">
-        <p className="eyebrow">
-          ADMINISTRATION
-        </p>
+      <div className="page-header admin-dash-header">
+        <div>
+          <p className="eyebrow">
+            ADMINISTRATION
+          </p>
 
-        <h1>Admin Dashboard</h1>
+          <h1>Admin Dashboard</h1>
 
-        <p>
-          Monitor CivicFix issues and overall
-          platform activity.
-        </p>
+          <p>
+            Monitor CivicFix issues and overall
+            platform activity.
+          </p>
+        </div>
+
+        <div className="issue-card-actions">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            {exporting
+              ? "Exporting…"
+              : "⬇ Export issues (CSV)"}
+          </button>
+
+          <Link to="/profile">
+            <button
+              type="button"
+              className="secondary-button"
+            >
+              My Profile
+            </button>
+          </Link>
+
+          <Link to="/">
+            <button
+              type="button"
+              className="secondary-button"
+            >
+              ⌂ Home
+            </button>
+          </Link>
+        </div>
       </div>
+
+      {error && (
+        <div className="form-error">{error}</div>
+      )}
 
       {/* Statistics */}
 
@@ -98,20 +214,6 @@ export default function AdminDashboard() {
 
         <div className="stat-card">
           <h2>
-            {status.reported || 0}
-          </h2>
-          <p>Reported</p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
-            {status.acknowledged || 0}
-          </h2>
-          <p>Acknowledged</p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
             {status.inProgress || 0}
           </h2>
           <p>In Progress</p>
@@ -119,48 +221,88 @@ export default function AdminDashboard() {
 
         <div className="stat-card">
           <h2>
-            {status.resolved || 0}
+            {(status.resolved || 0) +
+              (status.closed || 0)}
           </h2>
-          <p>Resolved</p>
+          <p>Resolved + Closed</p>
         </div>
 
         <div className="stat-card">
           <h2>
-            {status.closed || 0}
+            {(status.slaBreached || 0) +
+              (status.escalated || 0)}
           </h2>
-          <p>Closed</p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
-            {status.reopened || 0}
-          </h2>
-          <p>Reopened</p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
-            {status.escalated || 0}
-          </h2>
-          <p>Escalated</p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
-            {status.slaBreached || 0}
-          </h2>
-          <p>SLA Breached</p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
-            {status.duplicate || 0}
-          </h2>
-          <p>Duplicate</p>
+          <p>Breached / Escalated</p>
         </div>
       </section>
 
-      {/* Category Statistics */}
+      {/* Insights */}
+
+      <section className="stats-grid insights-grid">
+        <div className="stat-card">
+          <h2>
+            {analytics?.sla?.complianceRate ??
+              "—"}
+            {analytics?.sla?.complianceRate !=
+              null && "%"}
+          </h2>
+          <p>
+            SLA compliance
+            {analytics?.sla?.total
+              ? ` (${analytics.sla.total - analytics.sla.breached}/${analytics.sla.total} on time)`
+              : " (no SLAs yet)"}
+          </p>
+        </div>
+
+        <div className="stat-card">
+          <h2>
+            {analytics?.avgResolutionHours ??
+              "—"}
+            {analytics?.avgResolutionHours !=
+              null && "h"}
+          </h2>
+          <p>Average resolution time</p>
+        </div>
+      </section>
+
+      {/* Monthly trend */}
+
+      {monthly.length > 0 && (
+        <section className="details-card">
+          <p className="eyebrow">TREND</p>
+
+          <h2>Issues reported per month</h2>
+
+          <div
+            className="column-chart"
+            role="img"
+            aria-label="Issues reported per month over the last six months"
+          >
+            {monthly.map((m) => (
+              <div
+                className="column"
+                key={m.month}
+                title={`${m.month}: ${m.count} issues`}
+              >
+                <strong>{m.count}</strong>
+
+                <div className="column-track">
+                  <div
+                    className="column-bar"
+                    style={{
+                      height: `${(m.count / monthlyMax) * 100}%`,
+                    }}
+                  />
+                </div>
+
+                <span>{m.month}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Category chart */}
 
       <section className="details-card">
         <p className="eyebrow">
@@ -169,30 +311,36 @@ export default function AdminDashboard() {
 
         <h2>Issues by Category</h2>
 
-        {stats?.category?.length > 0 ? (
-          <div className="stats-list">
-            {stats.category.map(
-              (item) => (
-                <div
-                  className="stats-list-item"
-                  key={item.category}
-                >
-                  <span>
-                    {formatLabel(
-                      item.category
-                    )}
-                  </span>
-
-                  <strong>
-                    {item._count?.id ||
-                      0}
-                  </strong>
-                </div>
-              )
+        {analytics?.byCategory?.length > 0 ? (
+          <BarList
+            rows={analytics.byCategory.map(
+              (row) => ({
+                label: formatLabel(row.category),
+                count: row.count,
+              })
             )}
-          </div>
+          />
         ) : (
           <p>No category data available.</p>
+        )}
+      </section>
+
+      {/* Ward chart */}
+
+      <section className="details-card">
+        <p className="eyebrow">WARDS</p>
+
+        <h2>Issues by Ward</h2>
+
+        {analytics?.byWard?.length > 0 ? (
+          <BarList
+            rows={analytics.byWard.map((row) => ({
+              label: row.ward,
+              count: row.count,
+            }))}
+          />
+        ) : (
+          <p>No ward data available.</p>
         )}
       </section>
 
@@ -206,31 +354,55 @@ export default function AdminDashboard() {
         <h2>Issues by Severity</h2>
 
         {stats?.severity?.length > 0 ? (
-          <div className="stats-list">
-            {stats.severity.map(
-              (item) => (
-                <div
-                  className="stats-list-item"
-                  key={item.severity}
-                >
-                  <span>
-                    {formatLabel(
-                      item.severity
-                    )}
-                  </span>
-
-                  <strong>
-                    {item._count?.id ||
-                      0}
-                  </strong>
-                </div>
-              )
-            )}
-          </div>
+          <BarList
+            rows={stats.severity.map((item) => ({
+              label: formatLabel(item.severity),
+              count: item._count?.id || 0,
+            }))}
+          />
         ) : (
           <p>No severity data available.</p>
         )}
       </section>
+
+      {/* Chronic issues */}
+
+      {chronic.length > 0 && (
+        <section className="details-card chronic-card">
+          <p className="eyebrow">NEEDS A RETHINK</p>
+
+          <h2>Chronic issues</h2>
+
+          <p className="verification-intro">
+            These issues keep coming back — the fixes
+            are not holding. They may need a
+            different contractor, budget, or approach.
+          </p>
+
+          <div className="stats-list">
+            {chronic.map((issue) => (
+              <Link
+                key={issue.id}
+                to={`/issues/${issue.id}`}
+                className="stats-list-item chronic-row"
+              >
+                <span>
+                  <strong>{issue.title}</strong>
+                  {issue.ward
+                    ? ` · ${issue.ward.name}`
+                    : ""}
+                </span>
+
+                <span className="chronic-badge">
+                  ♻ reopened {issue.reopenCount}× ·{" "}
+                  {issue._count?.escalations || 0}{" "}
+                  escalations
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Admin Tools */}
 
@@ -263,6 +435,18 @@ export default function AdminDashboard() {
           <Link to="/admin/sla">
             <button type="button">
               SLA Management
+            </button>
+          </Link>
+
+          <Link to="/admin/users">
+            <button type="button">
+              Users &amp; Roles
+            </button>
+          </Link>
+
+          <Link to="/admin/audit">
+            <button type="button">
+              Audit Log
             </button>
           </Link>
         </div>

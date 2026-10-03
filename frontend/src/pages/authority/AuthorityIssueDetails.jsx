@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import api from "../../api/axios";
+import CommentsSection from "../../components/CommentsSection";
+import IssueChat from "../../components/IssueChat";
+import PhotoGallery from "../../components/PhotoGallery";
+import {
+  EmergencyBanner,
+  ChronicBadge,
+  VoiceNotes,
+} from "../../components/IssueExtras";
 
 export default function AuthorityIssueDetails() {
   const { id } = useParams();
@@ -14,6 +22,11 @@ export default function AuthorityIssueDetails() {
   const [success, setSuccess] = useState("");
 
   const [resolveNote, setResolveNote] = useState("");
+  const [resolveProof, setResolveProof] = useState(null);
+
+  const [progressNote, setProgressNote] = useState("");
+  const [progressPhoto, setProgressPhoto] = useState(null);
+  const [postingProgress, setPostingProgress] = useState(false);
 
   async function fetchIssue() {
     try {
@@ -132,31 +145,74 @@ export default function AuthorityIssueDetails() {
     );
   }
 
+  async function handleProgressUpdate(event) {
+    event.preventDefault();
+
+    if (!assignment || !progressNote.trim()) {
+      return;
+    }
+
+    setPostingProgress(true);
+    setActionError("");
+    setSuccess("");
+
+    const formData = new FormData();
+    formData.append("note", progressNote.trim());
+
+    if (progressPhoto) {
+      formData.append("photo", progressPhoto);
+    }
+
+    try {
+      await api.post(
+        `/assignments/${assignment.id}/progress`,
+        formData
+      );
+
+      setSuccess("Progress update posted.");
+      setProgressNote("");
+      setProgressPhoto(null);
+
+      await fetchIssue();
+    } catch (error) {
+      setActionError(
+        error.response?.data?.message ||
+          "Unable to post the progress update."
+      );
+    } finally {
+      setPostingProgress(false);
+    }
+  }
+
   function handleResolve(event) {
     event.preventDefault();
+
+    const formData = new FormData();
+
+    if (resolveNote.trim()) {
+      formData.append("note", resolveNote.trim());
+    }
+
+    if (resolveProof) {
+      formData.append("proof", resolveProof);
+    }
 
     performAssignmentAction(
       "resolve",
       "Issue resolved successfully.",
-      {
-        note:
-          resolveNote.trim() ||
-          undefined,
-      }
+      formData
     );
 
     setResolveNote("");
+    setResolveProof(null);
   }
 
   if (loading) {
     return (
       <div className="page">
-        <div className="empty-state">
-          <h2>Loading issue...</h2>
-
-          <p>
-            Please wait while we load the issue details.
-          </p>
+        <div className="loading-block">
+          <span className="spinner" />
+          <span>Loading issue…</span>
         </div>
       </div>
     );
@@ -167,7 +223,7 @@ export default function AuthorityIssueDetails() {
       <div className="page">
         <div className="page-header">
           <Link to="/authority">
-            ← Back to Authority Dashboard
+            ‹ Back to Authority Dashboard
           </Link>
 
           <p className="eyebrow">
@@ -217,7 +273,7 @@ export default function AuthorityIssueDetails() {
 
       <div className="page-header">
         <Link to="/authority">
-          ← Back to Authority Dashboard
+          ‹ Back to Authority Dashboard
         </Link>
 
         <p className="eyebrow">
@@ -232,7 +288,8 @@ export default function AuthorityIssueDetails() {
 
             <p>
               Reported on{" "}
-              {formatDate(issue.createdAt)}
+              {formatDate(issue.createdAt)}{" "}
+              <ChronicBadge issue={issue} />
             </p>
           </div>
 
@@ -241,6 +298,28 @@ export default function AuthorityIssueDetails() {
           </span>
         </div>
       </div>
+
+      <EmergencyBanner issue={issue} />
+
+      {issue.complaints?.length > 0 && (
+        <section className="complaint-image-section">
+          <div className="section-heading">
+            <h2>Reported evidence</h2>
+          </div>
+
+          <PhotoGallery
+            photos={issue.complaints.flatMap(
+              (complaint) =>
+                complaint.photos?.length
+                  ? complaint.photos
+                  : [complaint.imageUrl]
+            )}
+            alt={issue.title}
+          />
+
+          <VoiceNotes complaints={issue.complaints} />
+        </section>
+      )}
 
       {/* =====================================================
           MESSAGES
@@ -396,6 +475,64 @@ export default function AuthorityIssueDetails() {
 
             {canResolve && (
               <form
+                onSubmit={handleProgressUpdate}
+                className="resolve-form progress-form"
+              >
+                <div className="form-group">
+                  <label htmlFor="progress-note">
+                    Post a progress update
+                  </label>
+
+                  <textarea
+                    id="progress-note"
+                    value={progressNote}
+                    onChange={(event) =>
+                      setProgressNote(
+                        event.target.value
+                      )
+                    }
+                    placeholder="e.g. Material delivered, patching starts tomorrow morning..."
+                    rows={3}
+                    disabled={postingProgress}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="progress-photo">
+                    Photo (optional)
+                  </label>
+
+                  <input
+                    id="progress-photo"
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) =>
+                      setProgressPhoto(
+                        event.target.files?.[0] ||
+                          null
+                      )
+                    }
+                    disabled={postingProgress}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="workflow-primary-button"
+                  disabled={
+                    postingProgress ||
+                    !progressNote.trim()
+                  }
+                >
+                  {postingProgress
+                    ? "Posting…"
+                    : "Post update"}
+                </button>
+              </form>
+            )}
+
+            {canResolve && (
+              <form
                 onSubmit={handleResolve}
                 className="resolve-form"
               >
@@ -416,6 +553,30 @@ export default function AuthorityIssueDetails() {
                     rows={4}
                     disabled={actionLoading}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="resolve-proof">
+                    Photo of the completed work
+                  </label>
+
+                  <input
+                    id="resolve-proof"
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) =>
+                      setResolveProof(
+                        event.target.files?.[0] || null
+                      )
+                    }
+                    disabled={actionLoading}
+                  />
+
+                  {resolveProof && (
+                    <p className="detail-label">
+                      Selected: {resolveProof.name}
+                    </p>
+                  )}
                 </div>
 
                 <button
@@ -742,6 +903,14 @@ export default function AuthorityIssueDetails() {
                         </p>
                       )}
 
+                      {history.imageUrl && (
+                        <img
+                          className="timeline-photo"
+                          src={history.imageUrl}
+                          alt="Photo attached to this update"
+                        />
+                      )}
+
                       <small>
                         {formatDate(
                           history.createdAt
@@ -761,6 +930,24 @@ export default function AuthorityIssueDetails() {
           </div>
         )}
       </section>
+
+      {issue.resolutionImageUrl && (
+        <section className="complaint-image-section">
+          <div className="section-heading">
+            <h2>Resolution proof</h2>
+          </div>
+
+          <img
+            className="complaint-image"
+            src={issue.resolutionImageUrl}
+            alt="Photo of the completed work"
+          />
+        </section>
+      )}
+
+      <IssueChat issueId={issue.id} />
+
+      <CommentsSection issueId={issue.id} />
     </div>
   );
 }
