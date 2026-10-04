@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { recordAudit } from "../services/audit.service";
 import {
   createDepartment,
   getDepartments,
@@ -36,7 +38,7 @@ export async function getCategoryRulesController(
 }
 
 export async function setCategoryRuleController(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
@@ -55,6 +57,15 @@ export async function setCategoryRuleController(
       category,
       departmentId || null
     );
+
+    await recordAudit({
+      actorId: req.user?.userId,
+      action: "org.rule.set",
+      entityType: "CategoryRule",
+      entityId: rule?.id ?? null,
+      meta: { category, departmentId: departmentId || null },
+      ip: req.ip,
+    });
 
     return res.status(200).json({
       message: rule
@@ -85,7 +96,7 @@ export async function setCategoryRuleController(
 // ─────────────────────────────────────────────
 
 export async function createDepartmentController(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
@@ -98,6 +109,15 @@ export async function createDepartmentController(
     }
 
     const department = await createDepartment(name.trim());
+
+    await recordAudit({
+      actorId: req.user?.userId,
+      action: "org.department.create",
+      entityType: "Department",
+      entityId: department.id,
+      meta: { name: department.name },
+      ip: req.ip,
+    });
 
     return res.status(201).json({
       message: "Department created successfully",
@@ -145,7 +165,7 @@ export async function getDepartmentsController(
 // ─────────────────────────────────────────────
 
 export async function createWardController(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
@@ -167,6 +187,15 @@ export async function createWardController(
       name.trim(),
       code.trim()
     );
+
+    await recordAudit({
+      actorId: req.user?.userId,
+      action: "org.ward.create",
+      entityType: "Ward",
+      entityId: ward.id,
+      meta: { name: ward.name, code: ward.code },
+      ip: req.ip,
+    });
 
     return res.status(201).json({
       message: "Ward created successfully",

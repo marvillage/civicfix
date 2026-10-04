@@ -1,500 +1,672 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  Building2,
+  Check,
+  CircleCheck,
+  Clock,
+  Copy,
+  FileText,
+  HardHat,
+  ImageOff,
+  MapIcon,
+  MapPin,
+  MessageCircle,
+  SearchX,
+  Share2,
+  Siren,
+  Sparkles,
+  ThumbsUp,
+  Timer,
+  Users,
+} from "lucide-react";
 import api, { issueShareUrl } from "../../api/axios";
+import { BRAND, FEATURES } from "../../brand";
+import { useAuth } from "../../context/auth";
 import CommentsSection from "../../components/CommentsSection";
+import IssueMap from "../../components/IssueMap";
 import PhotoGallery from "../../components/PhotoGallery";
 import {
-  EmergencyBanner,
   ChronicBadge,
+  EmergencyBanner,
   ExpectedFix,
   VoiceNotes,
 } from "../../components/IssueExtras";
+import {
+  Avatar,
+  CategoryChip,
+  EmptyState,
+  Loading,
+  SectionHeader,
+  SeverityBadge,
+  StatusBadge,
+} from "../../components/ui";
+import { CATEGORY_META, STATUS_LABEL } from "../../lib/labels";
+import {
+  formatDateTime,
+  formatHours,
+  formatNumber,
+  timeAgo,
+} from "../../lib/format";
+
+const FIXED = ["RESOLVED", "CITIZEN_VERIFICATION", "CLOSED"];
+const NO_BACKING = ["CLOSED", "DUPLICATE"];
+const BACK_IDLE = { id: null, backed: false, note: "", error: "" };
+
+function byTime(a, b) {
+  return new Date(a.createdAt) - new Date(b.createdAt);
+}
 
 export default function PublicIssueDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated, can } = useAuth();
 
-  const [issue, setIssue] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [result, setResult] = useState({ id: null, issue: null, error: "" });
+  const [backing, setBacking] = useState(false);
+  const [back, setBack] = useState(BACK_IDLE);
+  const [copied, setCopied] = useState(false);
+  const [copyFallback, setCopyFallback] = useState("");
 
-  const [upvoting, setUpvoting] = useState(false);
-  const [upvoteMessage, setUpvoteMessage] = useState("");
-  const [upvoteError, setUpvoteError] = useState("");
-  const [shareMessage, setShareMessage] = useState("");
+  // The case on screen and the case in the URL can differ while a
+  // new one loads; everything below is derived from that.
+  const loading = result.id !== id;
+  const issue = loading ? null : result.issue;
+  const error = loading ? "" : result.error;
+  const { backed, note: backNote, error: backError } =
+    back.id === id ? back : BACK_IDLE;
+
+  // Stable array so the mini map doesn't refit on every render.
+  const mapIssues = useMemo(() => (issue ? [issue] : []), [issue]);
 
   useEffect(() => {
-    async function fetchIssue() {
-      try {
-        const response = await api.get(`/issues/${id}`);
+    let cancelled = false;
 
-        setIssue(response.data.issue || response.data);
-      } catch (error) {
-        console.error("Fetch public issue error:", error);
+    api
+      .get(`/issues/${id}`)
+      .then((response) => {
+        if (!cancelled) {
+          setResult({ id, issue: response.data.issue || response.data, error: "" });
+        }
+      })
+      .catch((fetchError) => {
+        console.error("Fetch Case File error:", fetchError);
 
-        setError(
-          error.response?.data?.message ||
-            "Unable to load this issue."
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
+        if (!cancelled) {
+          setResult({
+            id,
+            issue: null,
+            error:
+              fetchError.response?.status === 404
+                ? "This case doesn't exist, or it was merged into another one."
+                : fetchError.response?.data?.message ||
+                  "Couldn't open this case. Try again in a moment.",
+          });
+        }
+      });
 
-    fetchIssue();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  function formatStatus(status) {
-    return (
-      status
-        ?.replace(/_/g, " ")
-        .toLowerCase()
-        .replace(/\b\w/g, (char) => char.toUpperCase()) ||
-      "Unknown"
-    );
-  }
+  async function handleBack() {
+    setBack(BACK_IDLE);
 
-  function formatDate(date) {
-    if (!date) return "Unknown";
-
-    return new Date(date).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }
-
-  function formatDateTime(date) {
-    if (!date) return "Unknown";
-
-    return new Date(date).toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  function getStatusClass(status) {
-    return `status-badge status-${status
-      ?.toLowerCase()
-      .replace(/_/g, "-")}`;
-  }
-
-  async function handleUpvote() {
-    setUpvoteMessage("");
-    setUpvoteError("");
-
-    const token = localStorage.getItem("civicfix_token");
-
-    if (!token) {
-      navigate("/login");
+    if (!isAuthenticated) {
+      navigate("/login", { state: { from: location.pathname } });
       return;
     }
 
-    try {
-      setUpvoting(true);
+    setBacking(true);
 
+    try {
       await api.post(`/issues/${id}/upvote`);
 
-      setUpvoteMessage("Issue upvoted successfully.");
+      setBack({
+        id,
+        backed: true,
+        note: "You're backing this case. Updates will reach you.",
+        error: "",
+      });
+      setResult((current) =>
+        current.id !== id || !current.issue
+          ? current
+          : {
+              ...current,
+              issue: {
+                ...current.issue,
+                _count: {
+                  ...current.issue._count,
+                  upvotes: (current.issue._count?.upvotes || 0) + 1,
+                },
+              },
+            }
+      );
+    } catch (backErr) {
+      const statusCode = backErr.response?.status;
 
-      setIssue((currentIssue) => ({
-        ...currentIssue,
-        _count: {
-          ...currentIssue?._count,
-          upvotes:
-            (currentIssue?._count?.upvotes || 0) + 1,
-        },
-      }));
-    } catch (error) {
-      console.error("Upvote error:", error);
-
-      if (error.response?.status === 409) {
-        setUpvoteError(
-          "You have already upvoted this issue."
-        );
-      } else if (error.response?.status === 401) {
-        navigate("/login");
+      if (statusCode === 409) {
+        setBack({ id, backed: true, note: "You already back this case.", error: "" });
+      } else if (statusCode === 401) {
+        navigate("/login", { state: { from: location.pathname } });
       } else {
-        setUpvoteError(
-          error.response?.data?.message ||
-            "Unable to upvote this issue."
-        );
+        setBack({
+          id,
+          backed: false,
+          note: "",
+          error: backErr.response?.data?.message || "Couldn't back this case.",
+        });
       }
     } finally {
-      setUpvoting(false);
+      setBacking(false);
     }
   }
 
   if (loading) {
-    return (
-      <div className="dashboard">
-        <main className="dashboard-content">
-          <div className="empty-state">
-            <p>Loading issue...</p>
-          </div>
-        </main>
-      </div>
-    );
+    return <Loading label={`Opening the ${FEATURES.caseFile}…`} />;
   }
 
   if (error || !issue) {
     return (
-      <div className="dashboard">
-        <main className="dashboard-content">
-          <div className="form-error">
-            {error || "Issue not found."}
-          </div>
-
-          <Link to="/issues">
-            ‹ Back to Public Issues
-          </Link>
-        </main>
+      <div className="page">
+        <EmptyState
+          icon={SearchX}
+          title="Case not found"
+          action={
+            <Link to="/issues" className="btn btn-secondary">
+              <ArrowLeft aria-hidden="true" />
+              Back to {FEATURES.radar}
+            </Link>
+          }
+        >
+          {error || "This case doesn't exist."}
+        </EmptyState>
       </div>
     );
   }
 
-  const assignments = issue.assignments || [];
-  const statusHistory = issue.statusHistory || [];
+  const complaints = issue.complaints || [];
+  const photos = complaints.flatMap((complaint) =>
+    complaint.photos?.length ? complaint.photos : [complaint.imageUrl]
+  );
+  const history = [...(issue.statusHistory || [])].sort(byTime);
+  const assignment = [...(issue.assignments || [])].sort(
+    (a, b) => new Date(b.assignedAt) - new Date(a.assignedAt)
+  )[0];
+  const backers = issue._count?.upvotes ?? 0;
+  const reports = issue._count?.complaints ?? complaints.length;
+  const ref = `#${String(issue.id).slice(-6).toUpperCase()}`;
+  const fixed = FIXED.includes(issue.status);
+  const resolvedAt = history.find((h) => h.status === "RESOLVED")?.createdAt;
+  const fixHours = resolvedAt
+    ? (new Date(resolvedAt) - new Date(issue.createdAt)) / 3600000
+    : null;
+  const metDeadline =
+    resolvedAt && issue.sla?.deadline
+      ? new Date(resolvedAt) <= new Date(issue.sla.deadline)
+      : null;
+  const categoryLabel =
+    CATEGORY_META[issue.category]?.label ?? CATEGORY_META.OTHER.label;
+
+  const shareUrl = issueShareUrl(issue.id);
+  const shareText = `${issue.title}: a public case on ${BRAND.name}. Back it so it gets fixed.`;
+  const canNativeShare =
+    typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setCopyFallback("");
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopyFallback(shareUrl);
+    }
+  }
+
+  async function nativeShare() {
+    try {
+      await navigator.share({ title: issue.title, text: shareText, url: shareUrl });
+    } catch {
+      // Dismissed: nothing to do.
+    }
+  }
 
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <div>
-          <h1>CivicFix</h1>
-          <p>Public Issue Details</p>
+    <div className="page casefile">
+      <div className="casefile-top">
+        <Link to="/issues" className="btn btn-ghost btn-sm casefile-back-link">
+          <ArrowLeft aria-hidden="true" />
+          {FEATURES.radar}
+        </Link>
+      </div>
+
+      <header className="casefile-head">
+        <div className="casefile-tags">
+          <span className="casefile-ref">
+            <FileText aria-hidden="true" />
+            {FEATURES.caseFile} {ref}
+          </span>
+          <StatusBadge status={issue.status} />
+          <SeverityBadge severity={issue.severity} />
+          {issue.category && <CategoryChip category={issue.category} />}
+          {issue.isEmergency && (
+            <span className="red-alert">
+              <Siren aria-hidden="true" />
+              {FEATURES.redAlert}
+            </span>
+          )}
+          <ChronicBadge issue={issue} />
         </div>
 
-        <div className="dashboard-user">
-          <Link to="/issues">
-            Public Issues
-          </Link>
+        <h1>{issue.title || "Untitled case"}</h1>
 
-          <Link to="/citizen">
-            Dashboard
-          </Link>
+        <div className="meta-row casefile-meta">
+          <span title={formatDateTime(issue.createdAt)}>
+            <Clock aria-hidden="true" />
+            Reported {timeAgo(issue.createdAt)}
+          </span>
+          {issue.address && (
+            <span>
+              <MapPin aria-hidden="true" />
+              {issue.address}
+            </span>
+          )}
+          {issue.ward?.name && (
+            <span>
+              <Building2 aria-hidden="true" />
+              {issue.ward.name}
+              {issue.ward.code ? ` (${issue.ward.code})` : ""}
+            </span>
+          )}
         </div>
       </header>
 
-      <main className="dashboard-content">
-        <Link to="/issues">
-          ‹ Back to Public Issues
-        </Link>
+      <EmergencyBanner issue={issue} />
 
-        <section className="welcome-section">
-          <p className="eyebrow">CIVIC ISSUE</p>
-
-          <h2>{issue.title}</h2>
-
-          <p>
-            Reported on {formatDate(issue.createdAt)}
-          </p>
-        </section>
-
-        <EmergencyBanner issue={issue} />
-
-        <section className="complaint-card">
-          <div className="complaint-card-header">
-            <div>
-              <h2>Issue Information</h2>
-
-              <p>
-                {formatStatus(issue.category)}{" "}
-                <ChronicBadge issue={issue} />
-              </p>
-            </div>
-
-            <span
-              className={getStatusClass(issue.status)}
-            >
-              {formatStatus(issue.status)}
-            </span>
-          </div>
-
-          <PhotoGallery
-            photos={(issue.complaints || []).flatMap(
-              (complaint) =>
-                complaint.photos?.length
-                  ? complaint.photos
-                  : [complaint.imageUrl]
-            )}
-            alt={issue.title}
-          />
-
-          <VoiceNotes complaints={issue.complaints} />
-
-          <ExpectedFix issue={issue} />
-
-          <p className="complaint-description">
-            {issue.description ||
-              "No description provided."}
-          </p>
-
-          <div className="complaint-meta">
-            <span>
-              Severity: {formatStatus(issue.severity)}
-            </span>
-
-            <span>
-              👍 {issue._count?.upvotes || 0} upvotes
-            </span>
-
-            <span>
-              👥 {issue._count?.complaints || 0} reports
-            </span>
-          </div>
-
-          {issue.address && (
-            <p className="complaint-address">
-              📍 {issue.address}
-            </p>
-          )}
-
-          <div className="issue-actions-row">
-            <button
-              type="button"
-              onClick={handleUpvote}
-              disabled={upvoting}
-              className="primary-button"
-            >
-              {upvoting
-                ? "Upvoting..."
-                : "👍 Upvote Issue"}
-            </button>
-
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={async () => {
-                const shareUrl = issueShareUrl(issue.id);
-
-                try {
-                  await navigator.clipboard.writeText(
-                    shareUrl
-                  );
-                  setShareMessage("Link copied ✓");
-                } catch {
-                  setShareMessage(shareUrl);
-                }
-
-                setTimeout(
-                  () => setShareMessage(""),
-                  2500
-                );
-              }}
-            >
-              🔗 Copy link
-            </button>
-
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(
-                `${issue.title} — reported on CivicFix. Upvote it: ${issueShareUrl(issue.id)}`
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-              className="secondary-button share-anchor"
-            >
-              Share on WhatsApp
-            </a>
-          </div>
-
-          {shareMessage && (
-            <p className="detail-label">
-              {shareMessage}
-            </p>
-          )}
-
-          {upvoteMessage && (
-            <p>
-              {upvoteMessage}
-            </p>
-          )}
-
-          {upvoteError && (
-            <div className="form-error">
-              {upvoteError}
-            </div>
-          )}
-        </section>
-
-        {issue.sla && (
-          <section className="recent-section">
-            <div className="section-header">
-              <div>
-                <p className="eyebrow">SERVICE LEVEL</p>
-
-                <h2>SLA</h2>
-              </div>
-            </div>
-
-            <div className="complaint-card">
-              <div className="complaint-meta">
-                <span>
-                  Duration: {issue.sla.durationMin} minutes
-                </span>
-
-                <span>
-                  Deadline:{" "}
-                  {formatDateTime(issue.sla.deadline)}
-                </span>
-
-                <span>
-                  Status:{" "}
-                  {issue.sla.breached
-                    ? "Breached"
-                    : "Active"}
-                </span>
-              </div>
-
-              {issue.sla.breachedAt && (
-                <p>
-                  Breached on{" "}
-                  {formatDateTime(issue.sla.breachedAt)}
-                </p>
-              )}
-            </div>
-          </section>
-        )}
-
-        {assignments.length > 0 && (
-          <section className="recent-section">
-            <div className="section-header">
-              <div>
-                <p className="eyebrow">RESPONSIBILITY</p>
-
-                <h2>Assignment</h2>
-              </div>
-            </div>
-
-            {assignments.map((assignment) => (
-              <div
-                key={assignment.id}
-                className="complaint-card"
-              >
-                <div className="complaint-meta">
-                  <span>
-                    Authority:{" "}
-                    {assignment.authority?.name ||
-                      "Not available"}
-                  </span>
-
-                  <span>
-                    Department:{" "}
-                    {assignment.department?.name ||
-                      "Not assigned"}
-                  </span>
-
-                  <span>
-                    Ward:{" "}
-                    {assignment.ward?.name ||
-                      "Not assigned"}
-                  </span>
-                </div>
-
-                <p>
-                  Assigned on{" "}
-                  {formatDateTime(
-                    assignment.assignedAt
-                  )}
-                </p>
-
-                {assignment.acceptedAt && (
-                  <p>
-                    Accepted on{" "}
-                    {formatDateTime(
-                      assignment.acceptedAt
-                    )}
-                  </p>
-                )}
-
-                {assignment.completedAt && (
-                  <p>
-                    Completed on{" "}
-                    {formatDateTime(
-                      assignment.completedAt
-                    )}
-                  </p>
-                )}
-              </div>
-            ))}
-          </section>
-        )}
-
-        <section className="recent-section">
-          <div className="section-header">
-            <div>
-              <p className="eyebrow">PROGRESS</p>
-
-              <h2>Status History</h2>
-            </div>
-          </div>
-
-          {statusHistory.length === 0 ? (
-            <div className="empty-state">
-              <p>
-                No status updates have been recorded yet.
-              </p>
-            </div>
+      <div className="grid-main-side casefile-grid">
+        <div className="stack casefile-main">
+          {photos.filter(Boolean).length > 0 ? (
+            <PhotoGallery photos={photos} alt={issue.title} />
           ) : (
-            <div className="complaints-list">
-              {statusHistory.map((history) => (
-                <div
-                  key={history.id}
-                  className="complaint-card"
-                >
-                  <div className="complaint-card-header">
-                    <h3>
-                      {formatStatus(history.status)}
-                    </h3>
+            <div className="casefile-nophoto">
+              <ImageOff aria-hidden="true" />
+              No photo was attached to this report.
+            </div>
+          )}
 
+          <section className="card casefile-report">
+            <SectionHeader eyebrow="The report" title="What's wrong" />
+
+            <p className="casefile-desc">
+              {issue.description || "No description was added."}
+            </p>
+
+            <VoiceNotes complaints={complaints} />
+
+            <div className="details-grid casefile-facts">
+              <Fact icon={Building2} label="Department">
+                {issue.department?.name ||
+                  assignment?.department?.name ||
+                  "Not routed yet"}
+              </Fact>
+              <Fact icon={MapPin} label="Ward">
+                {issue.ward?.name || "Unmapped"}
+              </Fact>
+              <Fact icon={Users} label={FEATURES.echoCheck}>
+                {reports > 1
+                  ? `${formatNumber(reports)} reports merged`
+                  : "1 report"}
+              </Fact>
+              <Fact icon={ThumbsUp} label="Backers">
+                {formatNumber(backers)}
+              </Fact>
+              <Fact icon={Sparkles} label={FEATURES.autoSort}>
+                {issue.aiConfidence != null
+                  ? `${categoryLabel} · ${Math.round(issue.aiConfidence * 100)}% sure`
+                  : categoryLabel}
+              </Fact>
+              <Fact icon={Clock} label="Last update">
+                <span title={formatDateTime(issue.updatedAt)}>
+                  {timeAgo(issue.updatedAt || issue.createdAt)}
+                </span>
+              </Fact>
+            </div>
+          </section>
+
+          {issue.resolutionImageUrl && (
+            <section className="card casefile-proofcard">
+              <SectionHeader
+                eyebrow="Proof of fix"
+                title="Before and after"
+                description="The crew's photo of the finished work, next to the original report."
+              />
+
+              <div className="casefile-proof">
+                {photos[0] && (
+                  <figure>
+                    <img src={photos[0]} alt={`Before: ${issue.title}`} loading="lazy" />
+                    <figcaption>Before</figcaption>
+                  </figure>
+                )}
+                <figure>
+                  <img
+                    src={issue.resolutionImageUrl}
+                    alt={`After: completed work on ${issue.title}`}
+                    loading="lazy"
+                  />
+                  <figcaption className="is-after">After</figcaption>
+                </figure>
+              </div>
+            </section>
+          )}
+
+          <section className="card casefile-history">
+            <SectionHeader
+              eyebrow="Timeline"
+              title="How this case has moved"
+            />
+
+            {history.length === 0 ? (
+              <p className="empty-inline">No updates recorded yet.</p>
+            ) : (
+              <ol className="timeline casefile-timeline">
+                {history.map((entry, index) => {
+                  const last = index === history.length - 1;
+
+                  return (
+                    <li
+                      key={entry.id ?? index}
+                      className={`timeline-item ${last ? "timeline-item-last" : ""}`}
+                    >
+                      <span className="timeline-marker" aria-hidden="true" />
+
+                      <div className="timeline-content">
+                        <div className="timeline-title-row">
+                          <strong>
+                            {STATUS_LABEL[entry.status] ?? entry.status}
+                          </strong>
+                          {last && <span className="timeline-current">Now</span>}
+                        </div>
+
+                        {entry.note && <p>{entry.note}</p>}
+
+                        {entry.imageUrl && (
+                          <img
+                            className="timeline-photo"
+                            src={entry.imageUrl}
+                            alt={`Photo from the ${STATUS_LABEL[entry.status] ?? "status"} update`}
+                            loading="lazy"
+                          />
+                        )}
+
+                        <time
+                          dateTime={entry.createdAt}
+                          title={formatDateTime(entry.createdAt)}
+                        >
+                          {formatDateTime(entry.createdAt)} ·{" "}
+                          {timeAgo(entry.createdAt)}
+                        </time>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </section>
+
+          <CommentsSection issueId={issue.id} />
+        </div>
+
+        <aside className="stack casefile-side" aria-label="Case actions">
+          <section className="card casefile-backit">
+            <p className="eyebrow">{FEATURES.backIt}</p>
+
+            <div className="casefile-backers">
+              <strong>{formatNumber(backers)}</strong>
+              <span>{backers === 1 ? "backer" : "backers"}</span>
+            </div>
+
+            <p className="casefile-side-text">
+              Backing pushes the case up the crew's queue and sends you
+              every update until it's signed off.
+            </p>
+
+            {!NO_BACKING.includes(issue.status) &&
+              (!isAuthenticated || can("issue:upvote")) && (
+                <button
+                  type="button"
+                  className={`btn-block btn-lg ${backed ? "btn-secondary" : "btn-accent"}`}
+                  onClick={handleBack}
+                  disabled={backing || backed}
+                >
+                  {backed ? (
+                    <Check aria-hidden="true" />
+                  ) : backing ? (
+                    <span className="spinner" aria-hidden="true" />
+                  ) : (
+                    <ThumbsUp aria-hidden="true" />
+                  )}
+                  {backed ? "You back this" : backing ? "Backing…" : "Back it"}
+                </button>
+              )}
+
+            {!isAuthenticated && (
+              <p className="field-hint">You'll log in first. It takes a minute.</p>
+            )}
+
+            {backNote && (
+              <p className="form-success casefile-note" role="status">
+                {backNote}
+              </p>
+            )}
+
+            {backError && (
+              <p className="form-error casefile-note" role="alert">
+                {backError}
+              </p>
+            )}
+          </section>
+
+          <section className="card casefile-clock">
+            <SectionHeader eyebrow={FEATURES.fixClock} title="Deadline" />
+
+            {fixed ? (
+              <div className="casefile-fixed">
+                <span className="casefile-fixed-icon" aria-hidden="true">
+                  <CircleCheck />
+                </span>
+                <div>
+                  <strong>
+                    {fixHours != null
+                      ? `Fixed in ${formatHours(fixHours)}`
+                      : "Fix delivered"}
+                  </strong>
+                  {metDeadline != null && (
+                    <span className={metDeadline ? "text-success" : "text-danger"}>
+                      {metDeadline
+                        ? `Inside the ${FEATURES.fixClock}`
+                        : `Missed the ${FEATURES.fixClock}`}
+                    </span>
+                  )}
+                  {issue.status === "CITIZEN_VERIFICATION" && (
+                    <span>Waiting for the reporter's {FEATURES.signOff}.</span>
+                  )}
+                </div>
+              </div>
+            ) : issue.sla ? (
+              <>
+                <ExpectedFix issue={issue} bare />
+                {issue.sla.durationMin && (
+                  <p className="casefile-side-text">
+                    {issue.severity
+                      ? `${issue.severity.charAt(0)}${issue.severity.slice(1).toLowerCase()} severity cases`
+                      : "Cases like this"}{" "}
+                    get {formatHours(issue.sla.durationMin / 60)}. Miss it and
+                    the case escalates automatically.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="casefile-side-text">
+                <Timer aria-hidden="true" className="inline-icon" />
+                The clock starts when the case is routed to a crew.
+              </p>
+            )}
+          </section>
+
+          <section className="card casefile-crewcard">
+            <SectionHeader eyebrow={FEATURES.jobFlow} title="Who's on it" />
+
+            {assignment ? (
+              <div className="casefile-crew">
+                <div className="casefile-officer">
+                  <Avatar user={assignment.authority} size={40} />
+                  <div>
+                    <strong>{assignment.authority?.name || "Assigned officer"}</strong>
                     <span>
-                      {formatDateTime(
-                        history.createdAt
-                      )}
+                      {assignment.department?.name ||
+                        issue.department?.name ||
+                        "Municipal crew"}
                     </span>
                   </div>
-
-                  {history.note && (
-                    <p className="complaint-description">
-                      {history.note}
-                    </p>
-                  )}
-
-                  {history.imageUrl && (
-                    <img
-                      className="timeline-photo"
-                      src={history.imageUrl}
-                      alt="Photo attached to this update"
-                    />
-                  )}
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
 
-        {issue.resolutionImageUrl && (
-          <section className="recent-section">
-            <div className="section-header">
-              <div>
-                <p className="eyebrow">PROOF OF WORK</p>
-
-                <h2>Resolution photo</h2>
+                <ol className="casefile-steps">
+                  <Step done label="Assigned" at={assignment.assignedAt} />
+                  <Step
+                    done={!!assignment.acceptedAt}
+                    label="Accepted"
+                    at={assignment.acceptedAt}
+                  />
+                  <Step
+                    done={!!assignment.completedAt}
+                    label="Work completed"
+                    at={assignment.completedAt}
+                  />
+                </ol>
               </div>
+            ) : (
+              <p className="casefile-side-text">
+                <HardHat aria-hidden="true" className="inline-icon" />
+                No officer assigned yet. {FEATURES.autoSort} has routed it to{" "}
+                {issue.department?.name || "the right department"}.
+              </p>
+            )}
+          </section>
+
+          <section className="card casefile-share">
+            <SectionHeader eyebrow="Share" title="Get more backers" />
+
+            <div className="casefile-share-buttons">
+              <button type="button" className="btn-secondary" onClick={copyLink}>
+                {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                {copied ? "Link copied" : "Copy link"}
+              </button>
+
+              <a
+                className="btn btn-secondary"
+                href={`https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MessageCircle aria-hidden="true" />
+                WhatsApp
+              </a>
+
+              <a
+                className="btn btn-secondary"
+                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className="casefile-x" aria-hidden="true">
+                  𝕏
+                </span>
+                Post
+              </a>
+
+              {canNativeShare && (
+                <button type="button" className="btn-secondary" onClick={nativeShare}>
+                  <Share2 aria-hidden="true" />
+                  More
+                </button>
+              )}
             </div>
 
-            <img
-              className="complaint-image"
-              src={issue.resolutionImageUrl}
-              alt="Photo of the completed work"
-            />
-          </section>
-        )}
+            <p className="sr-only" role="status">
+              {copied ? "Link copied to clipboard" : ""}
+            </p>
 
-        <CommentsSection issueId={issue.id} />
-      </main>
+            {copyFallback && (
+              <label className="field casefile-copy-fallback">
+                <span className="field-hint">Copy this link:</span>
+                <input
+                  type="text"
+                  readOnly
+                  value={copyFallback}
+                  onFocus={(event) => event.target.select()}
+                />
+              </label>
+            )}
+          </section>
+
+          {Number.isFinite(issue.latitude) && Number.isFinite(issue.longitude) && (
+            <section className="card card-flush casefile-map">
+              <IssueMap
+                issues={mapIssues}
+                height={220}
+                label={`Location of ${issue.title}`}
+              />
+              <div className="casefile-map-foot">
+                <span>
+                  <MapPin aria-hidden="true" />
+                  {issue.address || `${issue.latitude.toFixed(4)}, ${issue.longitude.toFixed(4)}`}
+                </span>
+                <Link to="/issues?view=map" className="text-link">
+                  <MapIcon aria-hidden="true" className="inline-icon" />
+                  {FEATURES.radar}
+                </Link>
+              </div>
+            </section>
+          )}
+        </aside>
+      </div>
     </div>
+  );
+}
+
+function Fact({ icon: Icon, label, children }) {
+  return (
+    <div className="detail-item casefile-fact">
+      <span className="detail-label">
+        <Icon aria-hidden="true" />
+        {label}
+      </span>
+      <span className="detail-value">{children}</span>
+    </div>
+  );
+}
+
+function Step({ done, label, at }) {
+  return (
+    <li className={done ? "is-done" : ""}>
+      <span className="casefile-step-dot" aria-hidden="true">
+        {done && <Check />}
+      </span>
+      <span>
+        <strong>{label}</strong>
+        {at ? (
+          <time dateTime={at} title={formatDateTime(at)}>
+            {timeAgo(at)}
+          </time>
+        ) : (
+          <span className="muted">Not yet</span>
+        )}
+      </span>
+    </li>
   );
 }

@@ -1,739 +1,491 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  AlertTriangle,
+  CircleCheck,
+  Hourglass,
+  RefreshCw,
+  Route,
+  Search,
+  Timer,
+  Wrench,
+} from "lucide-react";
 import api from "../../api/axios";
+import { FEATURES } from "../../brand";
+import { useAuth } from "../../context/auth";
+import { ChartFrame, StackedBars } from "../../components/charts";
+import {
+  Avatar,
+  CategoryChip,
+  EmptyState,
+  Loading,
+  PageHeader,
+  SectionHeader,
+  StatTile,
+} from "../../components/ui";
+import { formatDateTime, formatNumber, timeAgo } from "../../lib/format";
+import {
+  apiError,
+  fixClock,
+  formatSpan,
+  shortId,
+  useNow,
+} from "./adminUtils";
 
-function getAssignmentStatus(assignment) {
-  const issueStatus = assignment.issue?.status;
+// Where a job sits in the Job Flow, derived from the assignment
+// timestamps and the case status.
+const JOB_STATES = {
+  PENDING: { label: "Waiting to accept", badge: "workflow-badge workflow-pending", step: 1 },
+  ACCEPTED: { label: "Accepted", badge: "status-badge status-assigned", step: 2 },
+  IN_PROGRESS: { label: "In progress", badge: "status-badge status-in-progress", step: 3 },
+  RESOLVED: { label: "Resolved", badge: "status-badge status-resolved", step: 4 },
+  ESCALATED: { label: "Escalated", badge: "status-badge status-escalated", step: 0 },
+  BREACHED: { label: "Fix Clock breached", badge: "status-badge status-sla-breached", step: 0 },
+};
 
-  if (assignment.completedAt || issueStatus === "RESOLVED") {
-    return "RESOLVED";
-  }
+const FILTERS = [
+  ["ALL", "All"],
+  ["PENDING", "Waiting"],
+  ["ACCEPTED", "Accepted"],
+  ["IN_PROGRESS", "In progress"],
+  ["RESOLVED", "Resolved"],
+  ["ESCALATED", "Escalated"],
+  ["BREACHED", "Breached"],
+];
 
-  if (issueStatus === "ESCALATED") {
-    return "ESCALATED";
-  }
+const FLOW_STEPS = ["Assigned", "Accepted", "Started", "Resolved"];
 
-  if (issueStatus === "SLA_BREACHED") {
-    return "SLA BREACHED";
-  }
+function jobState(assignment) {
+  const status = assignment.issue?.status;
 
-  if (issueStatus === "IN_PROGRESS") {
-    return "IN PROGRESS";
-  }
-
-  if (assignment.acceptedAt) {
-    return "ACCEPTED";
-  }
+  if (assignment.completedAt || status === "RESOLVED") return "RESOLVED";
+  if (status === "ESCALATED") return "ESCALATED";
+  if (status === "SLA_BREACHED") return "BREACHED";
+  if (status === "IN_PROGRESS") return "IN_PROGRESS";
+  if (assignment.acceptedAt) return "ACCEPTED";
 
   return "PENDING";
 }
 
-function getStatusClass(status) {
-  switch (status) {
-    case "RESOLVED":
-      return "status-resolved";
-
-    case "IN PROGRESS":
-      return "status-progress";
-
-    case "ACCEPTED":
-      return "status-accepted";
-
-    case "ESCALATED":
-      return "status-escalated";
-
-    case "SLA BREACHED":
-      return "status-breached";
-
-    default:
-      return "status-pending";
-  }
-}
-
-function formatDate(date) {
-  if (!date) return "—";
-
-  return new Date(date).toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
-
-function getSlaStatus(sla) {
-  if (!sla) return "NOT SET";
-
-  if (sla.breached) return "BREACHED";
-
-  if (new Date(sla.deadline) < new Date()) {
-    return "OVERDUE";
-  }
-
-  return "ACTIVE";
+function isLate(state) {
+  return state === "ESCALATED" || state === "BREACHED";
 }
 
 export default function AdminAssignments() {
+  const { can } = useAuth();
+  const now = useNow();
+
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [query, setQuery] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
 
-  async function fetchAssignments() {
+  const fetchAssignments = useCallback(async () => {
     try {
-      setLoading(true);
-      setError("");
-
       const response = await api.get("/assignments/all");
 
       setAssignments(response.data.assignments || []);
-    } catch (err) {
-      console.error("Failed to fetch assignments:", err);
-
-      setError(
-        err.response?.data?.message ||
-          "Failed to load assignments"
-      );
+      setError("");
+    } catch (fetchError) {
+      console.error("Fetch Dispatch error:", fetchError);
+      setError(apiError(fetchError, "Unable to load assignments."));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }
-
-  useEffect(() => {
-    fetchAssignments();
   }, []);
 
-  const filteredAssignments = useMemo(() => {
-    if (filter === "ALL") {
-      return assignments;
+  useEffect(() => {
+    // State is only set after the request resolves.
+    async function load() {
+      await fetchAssignments();
     }
 
-    return assignments.filter(
-      (assignment) =>
-        getAssignmentStatus(assignment) === filter
-    );
-  }, [assignments, filter]);
+    load();
+  }, [fetchAssignments]);
 
-  const stats = useMemo(() => {
-    const result = {
-      total: assignments.length,
-      pending: 0,
-      accepted: 0,
-      inProgress: 0,
-      resolved: 0,
-      escalated: 0,
-      slaBreached: 0,
-    };
+  const rows = useMemo(
+    () =>
+      assignments
+        .map((assignment) => ({ ...assignment, state: jobState(assignment) }))
+        .sort(
+          (a, b) =>
+            new Date(b.assignedAt).getTime() - new Date(a.assignedAt).getTime()
+        ),
+    [assignments]
+  );
 
-    assignments.forEach((assignment) => {
-      const status = getAssignmentStatus(assignment);
+  const counts = useMemo(() => {
+    const result = Object.fromEntries(FILTERS.map(([key]) => [key, 0]));
 
-      if (status === "PENDING") result.pending++;
-      if (status === "ACCEPTED") result.accepted++;
-      if (status === "IN PROGRESS") result.inProgress++;
-      if (status === "RESOLVED") result.resolved++;
-      if (status === "ESCALATED") result.escalated++;
-      if (status === "SLA BREACHED") result.slaBreached++;
+    result.ALL = rows.length;
+    rows.forEach((row) => {
+      result[row.state] += 1;
     });
 
     return result;
-  }, [assignments]);
+  }, [rows]);
+
+  const departments = useMemo(() => {
+    const map = new Map();
+
+    rows.forEach((row) => {
+      const department = row.department ?? row.issue?.department;
+
+      if (department?.id) map.set(department.id, department.name);
+    });
+
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [rows]);
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+
+    return rows.filter((row) => {
+      if (filter !== "ALL" && row.state !== filter) return false;
+
+      const department = row.department ?? row.issue?.department;
+
+      if (departmentId && department?.id !== departmentId) return false;
+
+      if (needle) {
+        const haystack = [
+          row.issue?.title,
+          row.issue?.id,
+          row.authority?.name,
+          row.authority?.email,
+          row.ward?.name ?? row.issue?.ward?.name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        if (!haystack.includes(needle)) return false;
+      }
+
+      return true;
+    });
+  }, [rows, filter, query, departmentId]);
+
+  // Workload per officer: active, late and done jobs.
+  const workload = useMemo(() => {
+    const map = new Map();
+
+    rows.forEach((row) => {
+      const officer = row.authority;
+
+      if (!officer?.id) return;
+
+      const entry = map.get(officer.id) ?? {
+        label: officer.name,
+        values: { active: 0, late: 0, done: 0 },
+      };
+
+      if (row.state === "RESOLVED") entry.values.done += 1;
+      else if (isLate(row.state)) entry.values.late += 1;
+      else entry.values.active += 1;
+
+      map.set(officer.id, entry);
+    });
+
+    return [...map.values()].sort(
+      (a, b) =>
+        b.values.active + b.values.late - (a.values.active + a.values.late) ||
+        a.label.localeCompare(b.label)
+    );
+  }, [rows]);
+
+  const waiting = rows
+    .filter((row) => row.state === "PENDING")
+    .sort((a, b) => new Date(a.assignedAt).getTime() - new Date(b.assignedAt).getTime())
+    .slice(0, 5);
 
   if (loading) {
-    return (
-      <div className="admin-page">
-        <div className="admin-loading">
-          Loading assignments...
-        </div>
-      </div>
-    );
+    return <Loading label={`Loading ${FEATURES.dispatch}…`} />;
   }
 
+  const caseLink = (issueId) =>
+    can("assignment:work") ? `/authority/issues/${issueId}` : `/issues/${issueId}`;
+
   return (
-    <div className="admin-page">
-      <div className="admin-container">
-        {/* HEADER */}
-        <div className="admin-page-header">
-          <div>
-            <Link
-              to="/admin"
-              className="admin-back-link"
+    <div className="page admin-page">
+      <PageHeader
+        eyebrow={FEATURES.dispatch}
+        title="Who's working on what"
+        description={`Every open job handed to an officer (plus anything finished in the last 30 days), where it sits in the ${FEATURES.jobFlow}, and how close it is to its ${FEATURES.fixClock}.`}
+        actions={
+          <>
+            {can("issue:read:all") && (
+              <Link to="/admin/issues" className="btn btn-secondary">
+                <Route aria-hidden="true" />
+                Assign from {FEATURES.caseDesk}
+              </Link>
+            )}
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setRefreshing(true);
+                fetchAssignments();
+              }}
+              disabled={refreshing}
             >
-              ‹ Back to Dashboard
-            </Link>
+              <RefreshCw aria-hidden="true" className={refreshing ? "is-spinning" : ""} />
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </>
+        }
+      />
 
-            <h1>Assignments</h1>
+      {error && <div className="form-error" role="alert">{error}</div>}
 
-            <p>
-              Monitor issue assignments and authority
-              progress.
-            </p>
-          </div>
+      <section className="kpi-row" aria-label="Job counts">
+        <StatTile
+          label="Waiting to accept"
+          value={formatNumber(counts.PENDING)}
+          hint="assigned, not yet picked up"
+          icon={Hourglass}
+          tone="warning"
+        />
+        <StatTile
+          label="On the job"
+          value={formatNumber(counts.ACCEPTED + counts.IN_PROGRESS)}
+          hint={`${formatNumber(counts.IN_PROGRESS)} crews on site`}
+          icon={Wrench}
+          tone="navy"
+        />
+        <StatTile
+          label="Late"
+          value={formatNumber(counts.ESCALATED + counts.BREACHED)}
+          hint="breached or escalated"
+          icon={AlertTriangle}
+          tone="danger"
+        />
+        <StatTile
+          label="Resolved"
+          value={formatNumber(counts.RESOLVED)}
+          hint={`of ${formatNumber(counts.ALL)} jobs`}
+          icon={CircleCheck}
+          tone="success"
+        />
+      </section>
 
-          <button
-            className="admin-refresh-btn"
-            onClick={fetchAssignments}
-          >
-            ↻ Refresh
-          </button>
-        </div>
-
-        {/* ERROR */}
-        {error && (
-          <div className="admin-error">
-            {error}
-          </div>
-        )}
-
-        {/* STATS */}
-        <div className="admin-stats-grid">
-          <button
-            className={`admin-stat-card ${
-              filter === "ALL" ? "active" : ""
-            }`}
-            onClick={() => setFilter("ALL")}
-          >
-            <span>Total</span>
-            <strong>{stats.total}</strong>
-          </button>
-
-          <button
-            className={`admin-stat-card ${
-              filter === "PENDING" ? "active" : ""
-            }`}
-            onClick={() => setFilter("PENDING")}
-          >
-            <span>Pending</span>
-            <strong>{stats.pending}</strong>
-          </button>
-
-          <button
-            className={`admin-stat-card ${
-              filter === "ACCEPTED" ? "active" : ""
-            }`}
-            onClick={() => setFilter("ACCEPTED")}
-          >
-            <span>Accepted</span>
-            <strong>{stats.accepted}</strong>
-          </button>
-
-          <button
-            className={`admin-stat-card ${
-              filter === "IN PROGRESS" ? "active" : ""
-            }`}
-            onClick={() => setFilter("IN PROGRESS")}
-          >
-            <span>In Progress</span>
-            <strong>{stats.inProgress}</strong>
-          </button>
-
-          <button
-            className={`admin-stat-card ${
-              filter === "RESOLVED" ? "active" : ""
-            }`}
-            onClick={() => setFilter("RESOLVED")}
-          >
-            <span>Resolved</span>
-            <strong>{stats.resolved}</strong>
-          </button>
-
-          <button
-            className={`admin-stat-card ${
-              filter === "ESCALATED" ? "active" : ""
-            }`}
-            onClick={() => setFilter("ESCALATED")}
-          >
-            <span>Escalated</span>
-            <strong>{stats.escalated}</strong>
-          </button>
-
-          <button
-            className={`admin-stat-card ${
-              filter === "SLA BREACHED" ? "active" : ""
-            }`}
-            onClick={() => setFilter("SLA BREACHED")}
-          >
-            <span>SLA Breached</span>
-            <strong>{stats.slaBreached}</strong>
-          </button>
-        </div>
-
-        {/* TABLE */}
-        <div className="admin-section">
-          <div className="admin-section-header">
-            <div>
-              <h2>Assignment Records</h2>
-
-              <p>
-                Showing {filteredAssignments.length} of{" "}
-                {assignments.length} assignments
-              </p>
-            </div>
-          </div>
-
-          {filteredAssignments.length === 0 ? (
-            <div className="admin-empty-state">
-              <h3>No assignments found</h3>
-
-              <p>
-                There are no assignments matching the
-                selected filter.
-              </p>
-            </div>
+      <section className="grid-2">
+        <ChartFrame
+          title="Workload by officer"
+          subtitle="Jobs per officer, by where they stand"
+          legend={WORKLOAD_KEYS.map((key) => ({ label: key.label, color: key.color }))}
+          table={{
+            columns: [
+              { key: "label", label: "Officer" },
+              { key: "active", label: "Active", numeric: true },
+              { key: "late", label: "Late", numeric: true },
+              { key: "done", label: "Done", numeric: true },
+            ],
+            rows: workload.map((row) => ({ label: row.label, ...row.values })),
+          }}
+        >
+          {workload.length ? (
+            <StackedBars rows={workload} keys={WORKLOAD_KEYS} />
           ) : (
-            <div className="admin-table-wrapper">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Issue</th>
-                    <th>Authority</th>
-                    <th>Department</th>
-                    <th>Ward</th>
-                    <th>Assigned</th>
-                    <th>Status</th>
-                    <th>SLA</th>
-                  </tr>
-                </thead>
+            <p className="empty-inline">No jobs handed out yet.</p>
+          )}
+        </ChartFrame>
 
-                <tbody>
-                  {filteredAssignments.map(
-                    (assignment) => {
-                      const status =
-                        getAssignmentStatus(
-                          assignment
-                        );
+        <div className="card">
+          <SectionHeader
+            eyebrow={FEATURES.jobFlow}
+            title="Longest waiting to accept"
+            description="Jobs an officer hasn't picked up yet, oldest first."
+          />
 
-                      const slaStatus =
-                        getSlaStatus(
-                          assignment.issue?.sla
-                        );
-
-                      return (
-                        <tr key={assignment.id}>
-                          {/* ISSUE */}
-                          <td>
-                            <div className="assignment-issue">
-                              <Link
-                                to={`/authority/issues/${assignment.issue?.id}`}
-                                className="assignment-issue-link"
-                              >
-                                {assignment.issue?.title ||
-                                  "Untitled Issue"}
-                              </Link>
-
-                              <span>
-                                {assignment.issue
-                                  ?.category || "—"}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* AUTHORITY */}
-                          <td>
-                            <div className="assignment-person">
-                              <strong>
-                                {assignment.authority
-                                  ?.name || "Unassigned"}
-                              </strong>
-
-                              <span>
-                                {assignment.authority
-                                  ?.email || "—"}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* DEPARTMENT */}
-                          <td>
-                            {assignment.department
-                              ?.name ||
-                              assignment.issue
-                                ?.department?.name ||
-                              "—"}
-                          </td>
-
-                          {/* WARD */}
-                          <td>
-                            {assignment.ward?.name ||
-                              assignment.issue?.ward
-                                ?.name ||
-                              "—"}
-                          </td>
-
-                          {/* ASSIGNED DATE */}
-                          <td>
-                            {formatDate(
-                              assignment.assignedAt
-                            )}
-                          </td>
-
-                          {/* STATUS */}
-                          <td>
-                            <span
-                              className={`assignment-status ${getStatusClass(
-                                status
-                              )}`}
-                            >
-                              {status}
-                            </span>
-                          </td>
-
-                          {/* SLA */}
-                          <td>
-                            <div className="assignment-sla">
-                              <span
-                                className={`sla-badge sla-${slaStatus
-                                  .toLowerCase()
-                                  .replace(
-                                    " ",
-                                    "-"
-                                  )}`}
-                              >
-                                {slaStatus}
-                              </span>
-
-                              {assignment.issue?.sla && (
-                                <small>
-                                  Deadline:{" "}
-                                  {formatDate(
-                                    assignment.issue
-                                      .sla.deadline
-                                  )}
-                                </small>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    }
-                  )}
-                </tbody>
-              </table>
-            </div>
+          {waiting.length === 0 ? (
+            <EmptyState icon={CircleCheck} title="Nothing waiting">
+              Every assigned job has been accepted.
+            </EmptyState>
+          ) : (
+            <ul className="list-divided waiting-list">
+              {waiting.map((row) => (
+                <li key={row.id}>
+                  <span className="person-cell">
+                    <Avatar user={row.authority} size={30} />
+                    <span className="person-stack">
+                      <Link to={caseLink(row.issue?.id)} className="case-link">
+                        {row.issue?.title || "Untitled case"}
+                      </Link>
+                      <span>{row.authority?.name ?? "Unassigned"}</span>
+                    </span>
+                  </span>
+                  <span className="chip chip-warning">
+                    <Hourglass aria-hidden="true" />
+                    {formatSpan(now - new Date(row.assignedAt).getTime())}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
-      </div>
+      </section>
 
-      <style>{`
-        .admin-page {
-          min-height: 100vh;
-          background: var(--bg);
-          padding: 32px;
-        }
+      <section className="stack" aria-label="Assignments">
+        <div className="tabs admin-tabs" role="group" aria-label="Filter by job state">
+          {FILTERS.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={`tab ${filter === key ? "is-active" : ""}`}
+              aria-pressed={filter === key}
+              onClick={() => setFilter(key)}
+            >
+              {label}
+              <span className="tab-count">{counts[key]}</span>
+            </button>
+          ))}
+        </div>
 
-        .admin-container {
-          max-width: 1400px;
-          margin: 0 auto;
-        }
+        <div className="filters-bar admin-filters">
+          <label className="search-field">
+            <span className="sr-only">Search jobs</span>
+            <Search aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search case, officer or ward"
+            />
+          </label>
 
-        .admin-page-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 20px;
-          margin-bottom: 28px;
-        }
+          <label className="admin-select">
+            <span className="sr-only">Department</span>
+            <select
+              value={departmentId}
+              onChange={(event) => setDepartmentId(event.target.value)}
+            >
+              <option value="">All departments</option>
+              {departments.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        .admin-back-link {
-          display: inline-block;
-          margin-bottom: 12px;
-          color: var(--text-muted);
-          text-decoration: none;
-          font-size: 14px;
-          font-weight: 500;
-        }
+          <p className="admin-count" aria-live="polite">
+            {formatNumber(visible.length)} of {formatNumber(rows.length)} jobs
+          </p>
+        </div>
 
-        .admin-back-link:hover {
-          color: var(--text);
-        }
+        {visible.length === 0 ? (
+          <EmptyState icon={Route} title="No jobs match">
+            Try another state, search or department.
+          </EmptyState>
+        ) : (
+          <div className="table-scroll admin-table-scroll">
+            <table className="data-table admin-table">
+              <caption className="sr-only">Assignments</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Case</th>
+                  <th scope="col">Officer</th>
+                  <th scope="col">Department</th>
+                  <th scope="col">Assigned</th>
+                  <th scope="col">{FEATURES.jobFlow}</th>
+                  <th scope="col">{FEATURES.fixClock}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((row) => {
+                  const meta = JOB_STATES[row.state];
+                  const clock = fixClock(row.issue, now);
+                  const department = row.department ?? row.issue?.department;
+                  const ward = row.ward ?? row.issue?.ward;
 
-        .admin-page-header h1 {
-          margin: 0 0 6px;
-          font-size: 30px;
-          color: var(--text);
-        }
-
-        .admin-page-header p {
-          margin: 0;
-          color: var(--text-muted);
-        }
-
-        .admin-refresh-btn {
-          border: none;
-          background: var(--primary);
-          color: var(--primary-ink);
-          padding: 10px 16px;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 600;
-        }
-
-        .admin-refresh-btn:hover {
-          background: var(--primary-dark);
-        }
-
-        .admin-error {
-          background: var(--danger-soft);
-          color: var(--danger);
-          border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-          border-radius: 10px;
-          padding: 14px 16px;
-          margin-bottom: 20px;
-        }
-
-        .admin-stats-grid {
-          display: grid;
-          grid-template-columns: repeat(
-            auto-fit,
-            minmax(150px, 1fr)
-          );
-          gap: 14px;
-          margin-bottom: 28px;
-        }
-
-        .admin-stat-card {
-          text-align: left;
-          border: 1px solid var(--border);
-          background: var(--surface);
-          border-radius: 12px;
-          padding: 18px;
-          cursor: pointer;
-          transition: 0.15s ease;
-        }
-
-        .admin-stat-card:hover {
-          border-color: var(--border-strong);
-          transform: translateY(-1px);
-        }
-
-        .admin-stat-card.active {
-          border-color: var(--primary);
-          box-shadow: 0 0 0 1px var(--primary);
-        }
-
-        .admin-stat-card span {
-          display: block;
-          color: var(--text-muted);
-          font-size: 13px;
-          margin-bottom: 8px;
-        }
-
-        .admin-stat-card strong {
-          display: block;
-          color: var(--text);
-          font-family: var(--font-data);
-          font-variant-numeric: tabular-nums;
-          font-size: 28px;
-        }
-
-        .admin-section {
-          background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: 14px;
-          overflow: hidden;
-        }
-
-        .admin-section-header {
-          padding: 22px 24px;
-          border-bottom: 1px solid var(--border);
-        }
-
-        .admin-section-header h2 {
-          margin: 0 0 5px;
-          font-size: 20px;
-          color: var(--text);
-        }
-
-        .admin-section-header p {
-          margin: 0;
-          color: var(--text-muted);
-          font-size: 14px;
-        }
-
-        .admin-table-wrapper {
-          width: 100%;
-          overflow-x: auto;
-        }
-
-        .admin-table {
-          width: 100%;
-          border-collapse: collapse;
-          min-width: 1050px;
-        }
-
-        .admin-table th {
-          background: var(--surface-soft);
-          color: var(--text-muted);
-          font-size: 12px;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          font-weight: 600;
-          text-align: left;
-          padding: 13px 16px;
-          border-bottom: 1px solid var(--border);
-          white-space: nowrap;
-        }
-
-        .admin-table td {
-          padding: 16px;
-          border-bottom: 1px solid var(--border);
-          color: var(--text-secondary);
-          font-size: 14px;
-          vertical-align: middle;
-        }
-
-        .admin-table tbody tr:hover {
-          background: var(--surface-soft);
-        }
-
-        .assignment-issue {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-          max-width: 260px;
-        }
-
-        .assignment-issue-link {
-          color: var(--text);
-          text-decoration: none;
-          font-weight: 600;
-        }
-
-        .assignment-issue-link:hover {
-          text-decoration: underline;
-        }
-
-        .assignment-issue span {
-          color: var(--text-muted);
-          font-size: 12px;
-        }
-
-        .assignment-person {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .assignment-person strong {
-          color: var(--text);
-          font-size: 14px;
-        }
-
-        .assignment-person span {
-          color: var(--text-muted);
-          font-size: 12px;
-        }
-
-        .assignment-status,
-        .sla-badge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 999px;
-          padding: 5px 9px;
-          font-size: 11px;
-          font-weight: 700;
-          white-space: nowrap;
-        }
-
-        .status-pending {
-          background: #241d12;
-          color: #d9a253;
-        }
-
-        .status-accepted {
-          background: #1b2436;
-          color: #9db4e8;
-        }
-
-        .status-progress {
-          background: #2a2110;
-          color: #ffb224;
-        }
-
-        .status-resolved {
-          background: #132818;
-          color: #63cf77;
-        }
-
-        .status-escalated {
-          background: #2f1420;
-          color: #f27fa5;
-        }
-
-        .status-breached {
-          background: #2f1416;
-          color: #ff8a8e;
-        }
-
-        .assignment-sla {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-        }
-
-        .assignment-sla small {
-          color: var(--text-muted);
-          font-size: 11px;
-          white-space: nowrap;
-        }
-
-        .sla-not-set {
-          background: #1d222b;
-          color: #8a93a0;
-        }
-
-        .sla-active {
-          background: #132818;
-          color: #63cf77;
-        }
-
-        .sla-overdue {
-          background: #241d12;
-          color: #d9a253;
-        }
-
-        .sla-breached {
-          background: #2f1416;
-          color: #ff8a8e;
-        }
-
-        .admin-empty-state {
-          text-align: center;
-          padding: 70px 20px;
-        }
-
-        .admin-empty-state h3 {
-          margin: 0 0 8px;
-          color: var(--text);
-        }
-
-        .admin-empty-state p {
-          margin: 0;
-          color: var(--text-muted);
-        }
-
-        .admin-loading {
-          min-height: 70vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--text-muted);
-          font-size: 16px;
-        }
-
-        @media (max-width: 700px) {
-          .admin-page {
-            padding: 18px;
-          }
-
-          .admin-page-header {
-            flex-direction: column;
-          }
-
-          .admin-refresh-btn {
-            width: 100%;
-          }
-        }
-      `}</style>
+                  return (
+                    <tr key={row.id}>
+                      <td>
+                        <div className="case-cell">
+                          <Link to={caseLink(row.issue?.id)} className="case-link">
+                            {row.issue?.title || "Untitled case"}
+                          </Link>
+                          <span className="case-meta">
+                            <span className="mono">#{shortId(row.issue?.id)}</span>
+                            {row.issue?.category && (
+                              <CategoryChip category={row.issue.category} short />
+                            )}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        {row.authority ? (
+                          <span className="person-cell">
+                            <Avatar user={row.authority} size={28} />
+                            <span className="person-stack">
+                              <strong>{row.authority.name}</strong>
+                              <span>{row.authority.email}</span>
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="muted">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="nowrap">
+                        {department?.name ?? <span className="muted">—</span>}
+                        {ward?.name && <span className="cell-sub">{ward.name}</span>}
+                      </td>
+                      <td className="nowrap">
+                        <time dateTime={row.assignedAt} title={formatDateTime(row.assignedAt)}>
+                          {timeAgo(row.assignedAt, now)}
+                        </time>
+                        <span className="cell-sub">{formatDateTime(row.assignedAt)}</span>
+                      </td>
+                      <td>
+                        <div className="flow-cell">
+                          <span className={meta.badge}>{meta.label}</span>
+                          {meta.step > 0 && <FlowSteps step={meta.step} />}
+                        </div>
+                      </td>
+                      <td>
+                        {clock.state === "none" ? (
+                          <span className="muted nowrap">No clock</span>
+                        ) : (
+                          <span className={`chip ${clock.tone ? `chip-${clock.tone}` : ""}`}>
+                            {clock.tone === "danger" ? (
+                              <AlertTriangle aria-hidden="true" />
+                            ) : (
+                              <Timer aria-hidden="true" />
+                            )}
+                            {clock.label}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
+  );
+}
+
+const WORKLOAD_KEYS = [
+  { key: "active", label: "Active", color: "var(--series-1)" },
+  { key: "late", label: "Late", color: "var(--series-8)" },
+  { key: "done", label: "Done", color: "var(--series-3)" },
+];
+
+// Four-step progress strip: Assigned → Accepted → Started → Resolved.
+function FlowSteps({ step }) {
+  return (
+    <span className="flow-steps" aria-label={`Step ${step} of 4: ${FLOW_STEPS[step - 1]}`} role="img">
+      {FLOW_STEPS.map((label, index) => (
+        <span key={label} className={index < step ? "is-done" : ""} title={label} />
+      ))}
+    </span>
   );
 }

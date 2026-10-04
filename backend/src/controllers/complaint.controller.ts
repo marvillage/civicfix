@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { param } from "../lib/http";
 import {
   createComplaint,
   getMyComplaints,
@@ -19,7 +20,7 @@ export async function withdrawComplaintController(
       });
     }
 
-    const { id } = req.params;
+    const id = param(req, "id");
 
     await withdrawComplaint(id, req.user.userId);
 
@@ -406,7 +407,7 @@ export async function getComplaintByIdController(
       });
     }
 
-    const { id } = req.params;
+    const id = param(req, "id");
 
     if (!id) {
       return res.status(400).json({
@@ -452,7 +453,7 @@ export async function verifyComplaintResolutionController(
       });
     }
 
-    const { complaintId } = req.params;
+    const complaintId = param(req, "complaintId");
     const { approved, note, stars } = req.body;
 
     if (!complaintId) {

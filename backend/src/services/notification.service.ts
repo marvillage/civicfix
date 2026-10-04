@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { sendEmail } from "./email.service";
+import { BRAND } from "../config/brand";
 
 export async function createNotification(
   userId: string,
@@ -23,7 +24,7 @@ export async function createNotification(
       if (user?.email) {
         return sendEmail(
           user.email,
-          `CivicFix: ${title}`,
+          `${BRAND.name}: ${title}`,
           message
         );
       }

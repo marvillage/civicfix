@@ -3,7 +3,7 @@ import { prisma } from "../src/lib/prisma";
 
 /**
  * Production seed: the minimum data a freshly deployed
- * CivicFix needs — the admin account, one authority, one
+ * Fixity needs — the admin account, one authority, one
  * citizen, the organisation structure, and four sample
  * issues that show the full lifecycle on the public pages.
  *
@@ -12,14 +12,14 @@ import { prisma } from "../src/lib/prisma";
  */
 
 const ADMIN = {
-  name: "CivicFix Admin",
-  email: "admin@gmail.com",
+  name: "Fixity Admin",
+  email: "admin@fixity.test",
   password: "123456789",
 };
 
 const AUTHORITY = {
   name: "Sunil Kumar",
-  email: "authority@civicfix.com",
+  email: "authority@fixity.test",
   password: "Authority@123",
   employeeId: "MCD-2026-0147",
   designation: "Junior Engineer",
@@ -28,12 +28,34 @@ const AUTHORITY = {
 
 const CITIZEN = {
   name: "Ananya Sharma",
-  email: "citizen@civicfix.com",
+  email: "citizen@fixity.test",
   password: "Citizen@123",
 };
 
-const photo = (seed: string) =>
-  `https://picsum.photos/seed/${seed}/900/600`;
+// Street photos bundled with the frontend (frontend/public/demo),
+// picked by the seed key's subject (same mapping as seed-demo.ts).
+const DEMO_PHOTOS: [RegExp, string[]][] = [
+  [/proof|resolved/, ["resolved-road", "resolved-street"]],
+  [/progress/, ["progress-crew"]],
+  [/streetlight|lamp|light/, ["streetlight-lane", "streetlight-dusk"]],
+  [/water|pipe|leak/, ["water-main"]],
+  [/drain|sewage|manhole|cover|flood/, ["drain-waterlogged"]],
+  [/garbage|bin|debris|waste/, ["garbage-bin"]],
+  [/pothole|road|cavein|chronic|footpath|dup|crack/, ["road-pothole", "road-cracked"]],
+];
+
+function keyHash(key: string) {
+  let hash = 0;
+  for (const char of key) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return hash;
+}
+
+const photo = (seed: string) => {
+  const match = DEMO_PHOTOS.find(([pattern]) => pattern.test(seed));
+  const files = match?.[1] ?? ["road-pothole"];
+
+  return `/demo/${files[keyHash(seed) % files.length]}.webp`;
+};
 
 const hoursAgo = (h: number) =>
   new Date(Date.now() - h * 3600 * 1000);
@@ -44,6 +66,17 @@ const hoursAhead = (h: number) =>
 async function wipe() {
   console.log("Clearing existing data...");
 
+  // Children before parents (v2 tables first).
+  await prisma.auditEvent.deleteMany();
+  await prisma.driveRsvp.deleteMany();
+  await prisma.drive.deleteMany();
+  await prisma.pollVote.deleteMany();
+  await prisma.pollOption.deleteMany();
+  await prisma.poll.deleteMany();
+  await prisma.watchZone.deleteMany();
+  await prisma.bulletin.deleteMany();
+  await prisma.workCost.deleteMany();
+  await prisma.departmentBudget.deleteMany();
   await prisma.message.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.notification.deleteMany();
@@ -184,10 +217,10 @@ async function main() {
     data: {
       citizenId: citizen.id,
       issueId: reported.id,
-      imageUrl: photo("civicfix-pothole-a"),
+      imageUrl: photo("story-pothole-a"),
       photos: [
-        photo("civicfix-pothole-a"),
-        photo("civicfix-pothole-b"),
+        photo("story-pothole-a"),
+        photo("story-pothole-b"),
       ],
       description:
         "Three large potholes fill with water after every rain. Two-wheelers swerve into oncoming traffic to avoid them.",
@@ -241,10 +274,10 @@ async function main() {
     data: {
       citizenId: citizen.id,
       issueId: inProgress.id,
-      imageUrl: photo("civicfix-road-a"),
+      imageUrl: photo("story-road-a"),
       photos: [
-        photo("civicfix-road-a"),
-        photo("civicfix-road-b"),
+        photo("story-road-a"),
+        photo("story-road-b"),
       ],
       description:
         "Tar has peeled away over a ten metre stretch, exposing loose gravel that keeps causing skids.",
@@ -301,7 +334,7 @@ async function main() {
         changedBy: officer.id,
         status: "IN_PROGRESS",
         note: "Base layer laid. Final surfacing scheduled for tomorrow morning.",
-        imageUrl: photo("civicfix-progress-1"),
+        imageUrl: photo("story-progress-1"),
         createdAt: hoursAgo(5),
       },
     ],
@@ -358,7 +391,7 @@ async function main() {
       aiConfidence: 0.86,
       wardId: ward7.id,
       departmentId: electrical.id,
-      resolutionImageUrl: photo("civicfix-light-proof"),
+      resolutionImageUrl: photo("story-light-proof"),
       createdAt: hoursAgo(120),
     },
   });
@@ -367,8 +400,8 @@ async function main() {
     data: {
       citizenId: citizen.id,
       issueId: resolved.id,
-      imageUrl: photo("civicfix-streetlight-a"),
-      photos: [photo("civicfix-streetlight-a")],
+      imageUrl: photo("story-streetlight-a"),
+      photos: [photo("story-streetlight-a")],
       description:
         "Six consecutive streetlights are dead. The lane is pitch dark after 7pm and feels unsafe.",
       latitude: 28.6202,
@@ -447,7 +480,7 @@ async function main() {
       aiConfidence: 0.83,
       wardId: ward7.id,
       departmentId: sanitation.id,
-      resolutionImageUrl: photo("civicfix-debris-proof"),
+      resolutionImageUrl: photo("story-debris-proof"),
       createdAt: hoursAgo(260),
     },
   });
@@ -456,8 +489,8 @@ async function main() {
     data: {
       citizenId: citizen.id,
       issueId: closed.id,
-      imageUrl: photo("civicfix-debris-a"),
-      photos: [photo("civicfix-debris-a")],
+      imageUrl: photo("story-debris-a"),
+      photos: [photo("story-debris-a")],
       description:
         "A pile of rubble from a private build has been sitting on the public road for two weeks.",
       latitude: 28.6175,

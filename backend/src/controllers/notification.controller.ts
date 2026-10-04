@@ -5,6 +5,7 @@ import {
   markAllNotificationsAsRead,
 } from "../services/notification.service";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { param } from "../lib/http";
 
 export async function getNotificationsController(
   req: AuthenticatedRequest,
@@ -33,7 +34,7 @@ export async function markNotificationAsReadController(
 ) {
   try {
     const userId = req.user!.userId;
-    const { notificationId } = req.params;
+    const notificationId = param(req, "notificationId");
 
     await markNotificationAsRead(notificationId, userId);
 

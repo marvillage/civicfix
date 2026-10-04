@@ -1,4 +1,5 @@
 import axios from "axios";
+import { BRAND } from "../config/brand";
 
 interface GeocodingResponse {
   display_name?: string;
@@ -19,7 +20,7 @@ export async function reverseGeocode(
           format: "json",
         },
         headers: {
-          "User-Agent": "CivicFix/1.0",
+          "User-Agent": `${BRAND.name}/1.0`,
         },
       }
     );

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware";
-import { authorizeRoles } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/role.middleware";
 import {
   createSLAController,
   checkSLABreachesController,
@@ -11,14 +11,14 @@ const router = Router();
 router.post(
   "/",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("sla:manage"),
   createSLAController
 );
 
 router.post(
   "/check-breaches",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("sla:manage"),
   checkSLABreachesController
 );
 

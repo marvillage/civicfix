@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware";
-import { authorizeRoles } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/role.middleware";
 import {
   getDashboardStatsController,
   getAnalyticsController,
@@ -19,14 +19,14 @@ const router = Router();
 router.get(
   "/stats",
   authenticate,
-  authorizeRoles("ADMIN", "AUTHORITY"),
+  requirePermission("analytics:full"),
   getDashboardStatsController
 );
 
 router.get(
   "/analytics",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("issue:read:all"),
   getAnalyticsController
 );
 
@@ -38,7 +38,7 @@ router.get(
 router.get(
   "/export/issues.csv",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("export:csv"),
   exportIssuesCSVController
 );
 
@@ -51,14 +51,14 @@ router.get(
 router.get(
   "/my-performance",
   authenticate,
-  authorizeRoles("AUTHORITY", "ADMIN"),
+  requirePermission("performance:read:own"),
   getMyPerformanceController
 );
 
 router.get(
   "/audit",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("audit:read"),
   getAuditLogController
 );
 
@@ -76,7 +76,7 @@ router.get(
 router.get(
   "/chronic",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("issue:read:all"),
   getChronicIssuesController
 );
 

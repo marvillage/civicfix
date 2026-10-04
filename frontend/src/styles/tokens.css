@@ -1,0 +1,235 @@
+/* =========================================================
+   FIXITY — DESIGN TOKENS
+   White · Signal Yellow · Navy. Light and dark are both
+   designed (not inverted): navy carries structure, yellow
+   carries action and attention, white carries content.
+   Components only ever reference these tokens.
+========================================================= */
+
+:root {
+  color-scheme: light;
+
+  /* Raw palette */
+  --navy-950: #050d1c;
+  --navy-900: #0a1730;
+  --navy-850: #0d1d3b;
+  --navy-800: #112548;
+  --navy-700: #17335f;
+  --navy-600: #1e4378;
+  --navy-500: #2a5694;
+  --navy-300: #8ea4c8;
+  --navy-100: #e6ecf6;
+  --navy-50: #f2f5fb;
+
+  --yellow-700: #8a6100;
+  --yellow-600: #f0b400;
+  --yellow-500: #ffc629;
+  --yellow-400: #ffd257;
+  --yellow-200: #ffe9a6;
+  --yellow-100: #fff4cc;
+  --yellow-50: #fffaeb;
+
+  /* Surfaces */
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-2: #f8fafd;
+  --surface-3: #eef2f8;
+  --surface-inverse: var(--navy-900);
+
+  /* Ink */
+  --text: #0a1730;
+  --text-2: #3d4c66;
+  --text-3: #5f6d86;
+  --text-inverse: #ffffff;
+
+  /* Lines */
+  --border: #e1e7f0;
+  --border-strong: #c9d2e1;
+
+  /* Brand roles */
+  --primary: var(--navy-800);
+  --primary-hover: var(--navy-700);
+  --on-primary: #ffffff;
+
+  --accent: var(--yellow-500);
+  --accent-hover: var(--yellow-600);
+  --on-accent: var(--navy-900);
+  --accent-soft: var(--yellow-100);
+  --accent-text: var(--yellow-700);
+
+  --link: #1e4f9c;
+  --focus-ring: 0 0 0 3px rgba(255, 198, 41, 0.65),
+    0 0 0 4px var(--navy-800);
+
+  /* Status (always paired with an icon or label) */
+  --success: #137a3f;
+  --success-soft: #e3f4ea;
+  --warning: #965a00;
+  --warning-soft: #fff1d6;
+  --danger: #c22f2f;
+  --danger-soft: #fde8e8;
+  --info: #1e4f9c;
+  --info-soft: #e6efff;
+  --violet: #4a3aa7;
+  --violet-soft: #eeebfb;
+  --neutral-soft: #eef1f6;
+
+  /* Sidebar (navy in both modes) */
+  --side-bg: var(--navy-900);
+  --side-bg-2: var(--navy-850);
+  --side-text: #c4cfe3;
+  --side-text-strong: #ffffff;
+  --side-muted: #7f90ae;
+  --side-border: rgba(255, 255, 255, 0.07);
+  --side-hover: rgba(255, 255, 255, 0.06);
+  --side-active-bg: rgba(255, 198, 41, 0.12);
+  --side-active: var(--yellow-500);
+
+  /* Data viz — validated (blue, yellow, aqua, orange, violet,
+     magenta, green, red); see components/charts */
+  --series-1: #1f5fbf;
+  --series-2: #eda100;
+  --series-3: #1baf7a;
+  --series-4: #eb6834;
+  --series-5: #4a3aa7;
+  --series-6: #e87ba4;
+  --series-7: #008300;
+  --series-8: #e34948;
+  --series-other: #9aa5b8;
+  --seq-low: #edf2fa;
+  --seq-high: #12387a;
+  --chart-surface: var(--surface);
+  --grid: #e9edf4;
+  --axis: #c6cedb;
+  --status-good: #0ca30c;
+  --status-warn: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  /* Shape */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  --shadow-xs: 0 1px 2px rgba(10, 23, 48, 0.06);
+  --shadow-sm: 0 1px 3px rgba(10, 23, 48, 0.07),
+    0 1px 2px rgba(10, 23, 48, 0.04);
+  --shadow-md: 0 8px 24px rgba(10, 23, 48, 0.08),
+    0 2px 6px rgba(10, 23, 48, 0.05);
+  --shadow-lg: 0 24px 56px rgba(10, 23, 48, 0.14);
+
+  /* Type */
+  --font-display: "Overpass", "Public Sans", ui-sans-serif,
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "Public Sans", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code",
+    Consolas, monospace;
+
+  /* Layout */
+  --sidebar-w: 264px;
+  --topbar-h: 64px;
+  --content-max: 1240px;
+  --gutter: clamp(16px, 3vw, 32px);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 120ms var(--ease);
+  --t: 180ms var(--ease);
+
+  /* Signature: road-sign hazard stripe */
+  --stripe: repeating-linear-gradient(
+    -45deg,
+    var(--yellow-500) 0 10px,
+    var(--navy-900) 10px 20px
+  );
+}
+
+/* ---------- Dark (explicit choice) ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #060e1d;
+  --surface: #0c1830;
+  --surface-2: #0f1e3a;
+  --surface-3: #152948;
+  --surface-inverse: #f4f6fb;
+
+  --text: #edf2fb;
+  --text-2: #b8c4da;
+  --text-3: #8d9cb8;
+  --text-inverse: var(--navy-900);
+
+  --border: #1b2d4f;
+  --border-strong: #2a416d;
+
+  --primary: var(--yellow-500);
+  --primary-hover: var(--yellow-400);
+  --on-primary: var(--navy-900);
+
+  --accent: var(--yellow-500);
+  --accent-hover: var(--yellow-400);
+  --on-accent: var(--navy-900);
+  --accent-soft: rgba(255, 198, 41, 0.13);
+  --accent-text: var(--yellow-400);
+
+  --link: #8db6ff;
+  --focus-ring: 0 0 0 3px rgba(255, 198, 41, 0.7),
+    0 0 0 4px #060e1d;
+
+  --success: #4cc38a;
+  --success-soft: rgba(76, 195, 138, 0.14);
+  --warning: #f5b545;
+  --warning-soft: rgba(245, 181, 69, 0.14);
+  --danger: #ff7272;
+  --danger-soft: rgba(255, 114, 114, 0.14);
+  --info: #86aefc;
+  --info-soft: rgba(122, 167, 255, 0.14);
+  --violet: #a99bf2;
+  --violet-soft: rgba(144, 133, 233, 0.16);
+  --neutral-soft: rgba(141, 156, 184, 0.14);
+
+  --side-bg: #040a16;
+  --side-bg-2: #071125;
+  --side-border: rgba(255, 255, 255, 0.06);
+
+  --series-1: #3987e5;
+  --series-2: #c98500;
+  --series-3: #199e70;
+  --series-4: #d95926;
+  --series-5: #9085e9;
+  --series-6: #d55181;
+  --series-7: #008300;
+  --series-8: #e66767;
+  --series-other: #5d6b85;
+  --seq-low: #10203d;
+  --seq-high: #ffc629;
+  --grid: #16274a;
+  --axis: #2b4270;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* ---------- Dark (OS preference, before a choice is stamped) ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #060e1d;
+    --surface: #0c1830;
+    --surface-2: #0f1e3a;
+    --surface-3: #152948;
+    --text: #edf2fb;
+    --text-2: #b8c4da;
+    --text-3: #8d9cb8;
+    --border: #1b2d4f;
+    --border-strong: #2a416d;
+    --primary: var(--yellow-500);
+    --primary-hover: var(--yellow-400);
+    --on-primary: var(--navy-900);
+  }
+}

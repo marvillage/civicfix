@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../src/lib/prisma";
 
 async function main() {
-  const email = "authority@civicfix.test";
+  const email = "authority@fixity.test";
   const password = "Authority@123";
 
   const passwordHash = await bcrypt.hash(
@@ -40,7 +40,7 @@ async function main() {
 
   const user = await prisma.user.create({
     data: {
-      name: "CivicFix Authority",
+      name: "Fixity Authority",
       email,
       passwordHash,
       role: "AUTHORITY",

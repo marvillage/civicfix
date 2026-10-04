@@ -1,169 +1,175 @@
-# CivicFix — Feature Documentation
+# Fixity — Feature Guide
 
-Every feature in the platform, in plain language: what it's called, how to use it, and why it exists.
+Every feature in plain language: what it's called, who can use it, how, and why it exists.
 
-Roles: **Citizen** (public user), **Authority** (municipal officer), **Admin** (platform manager). Some features need no account at all.
+Roles: **Citizen** (resident), **Officer** (municipal authority; `AUTHORITY` in the API), **Admin** (city operations). Some features need no account at all. Exactly who may do what is defined in one place, the permission matrix (`backend/src/auth/permissions.ts`), and admins can read it in the app under **Permission Matrix**.
+
+> Renamed from CivicFix. The old feature names are listed in brackets so older notes still make sense.
 
 ---
 
-## For Everyone (no login needed)
+## For everyone (no login needed)
 
 ### Landing page
-- **How to use:** Open the website. The homepage explains the product with live city statistics, and has Log in / Sign up buttons in the navbar.
-- **Value added:** New visitors understand what CivicFix does in ten seconds and can see real proof (live numbers) that it works.
+- **How:** Open the site. Live city numbers, the five-step journey of a case, and links into every public feature.
+- **Why:** A visitor understands the product in ten seconds and sees proof that it works.
 
-### Anonymous reporting
-- **How to use:** Click "Report anonymously" on the homepage (or go to `/report`). Add photos, an optional voice note, location — no account needed.
-- **Value added:** Removes the biggest barrier to reporting. A person standing at an open manhole shouldn't need to create a password first.
+### Quick Drop *(was: anonymous reporting)*
+- **How:** "Report an issue" in the header, or `/report`. Photos (up to 5), an optional voice note, GPS with the address filled in, and a **Red Alert** box for hazards. No account.
+- **Why:** The person standing next to an open manhole shouldn't have to create a password first.
 
-### Public issues browser
-- **How to use:** Go to `/issues`. Search by text, filter by category / status / ward, sort by newest, oldest, or most upvoted.
-- **Value added:** Full transparency — anyone can see every open problem in the city and its current state.
+### City Radar *(was: public issues, map, heatmap, near me)*
+- **How:** `/issues`. Search, filter by category / status / ward, sort, and switch between **List**, **Map** and **Hotspots**. "Near me" sorts by distance with a 500 m – 5 km radius. Long lists load in pages ("Load more").
+- **Why:** The map shows where the city is broken; Hotspots show which areas are neglected; Near me makes it personal.
 
-### Map, heatmap, and "near me"
-- **How to use:** On the public issues page, switch between List / Map / Heat views. Tap "📍 Issues near me" to see problems around your location, with a 500 m – 5 km radius picker.
-- **Value added:** The map shows *where* the city is broken; the heatmap shows *which areas* are neglected; near-me makes it personal.
+### Case File *(was: issue detail page)*
+- **How:** Open any case: photo gallery, voice note, key facts, the **Fix Clock** "expected fix by" bar, the full timeline with progress photos, **Back It**, share links and **Street Talk**.
+- **Why:** One page tells the whole story of a problem from first photo to signed-off fix.
 
-### Issue detail page
-- **How to use:** Click any issue. You'll see photos (gallery with lightbox), voice notes, status timeline with progress photos, SLA "expected fix by" progress bar, comments, assignment info, and share buttons (copy link / WhatsApp).
-- **Value added:** One page tells the complete story of an issue from report to verified fix.
+### City Pulse *(new; replaces the transparency page)*
+- **How:** `/pulse`. One filter row (30 days / 90 days / 12 months, ward, category) drives every chart on the page:
+  - headline tiles: reported (with change against the previous period and a trend line), fixed, open backlog, median time to fix, Fix Clock kept, resident rating
+  - **Reported vs fixed** over time and the **backlog** curve
+  - **When the city reports problems**: a weekday × hour heatmap (commute peaks stand out)
+  - **What breaks**: cases per category with each category's median fix time
+  - **Ward Scorecards**: a map of wards (bubble = open backlog, colour and letter = A–F grade) next to per-ward meters, with one tap to focus the whole page on a ward
+  - **What each ward reports**: the category mix per ward, as shares or counts
+  - **How residents rate the fixes**: the 1–5 star distribution from Sign-Offs
+  - **Where the money goes**: Cost Ledger spend by category
+  - **Departments**: cases fixed, median fix time, Fix Clock kept, rating and spend in one table
+  
+  Every chart has a table view and keyboard-readable tooltips.
+- **Why:** Accountability you can see. Residents, journalists and councillors get the same numbers the admins see.
 
-### Transparency page & ward report cards
-- **How to use:** Go to `/stats`. See city-wide totals, average fix time, category breakdown, and each ward graded A–F on resolution rate + SLA compliance.
-- **Value added:** Public accountability. Wards compete on grades; citizens see which areas keep their promises.
+### Ward Bulletins *(new)*
+- **How:** `/bulletins`. Planned roadworks, water or power outages, advisories and events, with tabs for **Active / Upcoming / Past** and filters for ward and kind. Pinned notices come first.
+- **Why:** A lot of complaints are about work the city already knows about. Saying so in advance prevents duplicate reports and angry calls.
 
----
+### Ward Vote *(new)*
+- **How:** `/polls`. See open and closed votes, often "which of these should we fix first?" with options linked to real cases. Results show once you've voted or the vote closes.
+- **Why:** Participatory budgeting in its simplest form. Residents set priorities, and the result is public.
 
-## For Citizens
-
-### Sign up / Log in
-- **How to use:** Create an account with name, email, password. New accounts are always Citizens — staff roles can only be granted by an Admin.
-- **Value added:** Secure role-based access; nobody can self-promote into an authority.
-
-### Report an issue
-- **How to use:** Dashboard → "Report an Issue". Attach up to 5 photos, record a voice note (up to 2 min), tap "Use My Location" (GPS + auto address), tick 🚨 Emergency if it's a safety hazard, submit.
-- **Value added:** A complete, geolocated, evidence-backed report in under a minute. AI (Gemini) reads the photo and classifies the category and severity automatically.
-
-### Emergency flag
-- **How to use:** Tick "🚨 This is an emergency" while reporting.
-- **Value added:** Severity is forced to CRITICAL, every admin is alerted instantly, and the issue jumps to the top of the authority's queue.
-
-### Duplicate detection
-- **How to use:** When you set a location on the report form, a panel appears showing similar open issues within 500 m — with one-tap Upvote instead of filing again.
-- **Value added:** Fifty duplicate reports of one pothole become one issue with fifty upvotes — a much stronger signal.
-
-### Upvoting & watching
-- **How to use:** Press "👍 Upvote" on any public issue. From then on you're notified whenever that issue changes status.
-- **Value added:** Upvotes raise priority; watching keeps supporters informed without re-checking the page.
-
-### My complaints & timeline
-- **How to use:** Dashboard → "My Complaints". Each complaint shows a live timeline of every status change, note, and progress photo.
-- **Value added:** No more "submitted into a black hole" — you can see exactly where your report stands.
-
-### Verify the fix + star rating
-- **How to use:** When an issue is marked Resolved, your complaint page shows a before/after photo comparison and asks "Has this been resolved?" Confirm with a 1–5 star satisfaction rating, or reopen it with a reason.
-- **Value added:** The citizen — not the authority — closes the loop. Ratings feed the officer's public scorecard.
-
-### Withdraw a report
-- **How to use:** On your complaint page (while it's still unassigned), press "Withdraw report".
-- **Value added:** Mistakes and already-fixed issues can be cleaned up by the reporter themselves.
-
-### Private chat with the authority
-- **How to use:** On your complaint page, use the "Private thread" to message the assigned officer directly.
-- **Value added:** Gate codes, exact directions, clarifications — things that don't belong in public comments.
-
-### Comments
-- **How to use:** Every issue page has a public Discussion section; any signed-in user can post.
-- **Value added:** Neighbours add context ("it's worse after rain"), authorities answer publicly.
-
-### Civic points, badges & leaderboard
-- **How to use:** Earn points automatically: +5 per report, +5 for verifying, +10 bonus when a fix is confirmed. Badges (First Report, Fixer, Change Maker…) unlock on the dashboard; the Top Contributors leaderboard ranks your ward.
-- **Value added:** Gamification keeps citizens engaged after their first report.
-
-### Impact stats
-- **How to use:** Dashboard tiles show reports filed, "fixed because of you", and upvotes received.
-- **Value added:** Shows each citizen their concrete effect on the city.
-
-### Notifications
-- **How to use:** The dashboard shows in-app notifications (acknowledged, work started, resolved, escalated, messages…). Each also goes out as an email when SMTP is configured.
-- **Value added:** Citizens never need to poll the site to know something happened.
-
-### Profile & dark mode
-- **How to use:** Click your name → Profile to change your name or password. The ☾ button (bottom-right) toggles dark mode; the choice is remembered.
-- **Value added:** Basic account hygiene plus comfortable night-time use.
+### Cleanup Drives *(new)*
+- **How:** `/drives`. Browse upcoming volunteer drives (date, place, capacity, organiser, linked case) and past ones.
+- **Why:** Some problems are faster to fix together. Drives turn reporters into neighbours who act.
 
 ---
 
-## For Authorities
+## For citizens
 
-### Separate, verified accounts
-- **How to use:** You can't sign up as an authority. An Admin creates the account with your government/employee ID, designation, phone, and department, and hands you a one-time temporary password. Log in and change it on your Profile.
-- **Value added:** Authority access is provisioned, identity-verified, and auditable — like a real municipal system.
+### Sign up / log in
+- **How:** Name, email, password. New accounts are always citizens; staff roles are granted only by an admin.
+- **Why:** Nobody can promote themselves into an officer.
 
-### Work queue with SLA countdowns
-- **How to use:** The Authority Dashboard lists your assigned issues sorted most-urgent-first: emergencies on top, then breached SLAs, then nearest deadlines. Each card shows a live ⏱ countdown (amber under 4 hours, red when breached). Filter by Pending / Active / Resolved via the stat cards.
-- **Value added:** The queue tells you what to do *next*, not just what exists.
+### Snap & Send *(was: report an issue)*
+- **How:** The yellow button at the top of the sidebar. Same as Quick Drop, plus points and tracking. **AutoSort** *(was: AI classification)* reads the photo and sets the category and severity.
+- **Why:** A complete, geolocated, evidence-backed report in under a minute.
 
-### Map of my assignments
-- **How to use:** Toggle List/Map on the dashboard to see your issues as pins.
-- **Value added:** Plan a field route instead of criss-crossing the city.
+### Echo Check *(was: duplicate detection)*
+- **How:** When you set a location, similar open cases within 500 m appear with a one-tap **Back It** button instead of filing again.
+- **Why:** Fifty duplicate reports of one pothole become one case with fifty backers, which is a much stronger signal.
 
-### Accept → Start → Resolve workflow
-- **How to use:** On an issue: Accept the assignment (citizen is notified), Start Work, then Resolve with a resolution note and a **photo of the completed work**.
-- **Value added:** A disciplined state machine with an evidence trail at every step.
+### Back It *(was: upvote & watch)*
+- **How:** "Back it" on any case. Backers raise priority and get an alert on every status change.
 
-### Progress updates
-- **How to use:** While work is In Progress, post a note + photo ("material delivered, patching tomorrow"). It appears on the public timeline and notifies all watchers.
-- **Value added:** Citizens see movement, which prevents premature reopens and angry calls.
+### My Cases *(was: my complaints)*
+- **How:** Each case shows a live timeline of every status change, note and progress photo.
 
-### Field survey mode
-- **How to use:** Dashboard → "+ Log field issue". Photograph a problem you spotted on your rounds; it's created pre-acknowledged and assigned to you.
-- **Value added:** Officers don't have to wait for a citizen to notice what they can already see.
+### Sign-Off *(was: verify the fix + star rating)*
+- **How:** When a case is resolved you see a before/after comparison. Sign it off with 1–5 stars, or reopen it with a reason.
+- **Why:** The resident, not the department, closes the loop. Ratings feed the officer's scorecard and City Pulse.
 
-### Performance scorecard
-- **How to use:** Dashboard tiles show your average resolution time, issues resolved this month, SLA hit rate, and average citizen ★ rating.
-- **Value added:** Officers see their own numbers before anyone else does.
+### Withdraw
+- **How:** On your case, while it's still unassigned.
 
-### Private thread & comments
-- **How to use:** Same chat and discussion tools as citizens, on every assigned issue.
-- **Value added:** Direct line to the reporter without exchanging phone numbers.
+### Direct Line *(was: private chat)* and Street Talk *(was: comments)*
+- **How:** Direct Line is a private thread with the assigned officer; Street Talk is the public discussion on every case.
+
+### Watch Zones *(new)*
+- **How:** `/watch-zones`. Draw up to five circles (home, office, a child's school route): click the map or use your location, set a radius from 100 m to 5 km, and optionally pick categories. Each zone lists the open cases inside it.
+- **Alerts:** whenever a **new** case is reported inside a zone and matches its categories, you get an alert (and an email when SMTP is configured). You are never alerted about your own report.
+- **Why:** You learn about problems on your street without checking the site.
+
+### Ward Vote (voting)
+- **How:** Pick one option and cast your vote. One vote per poll, enforced by the database, not just the button. +2 Civic Cred.
+
+### Cleanup Drives (taking part)
+- **How:** **Propose a drive** (title, description, time at least 2 h ahead, capacity, location, optional linked case); an admin reviews it. Once approved, neighbours **RSVP** until it's full. After the drive the organiser marks attendance: **+15 Civic Cred** per attendee and **+25** for the organiser.
+
+### Civic Cred *(was: civic points, badges & leaderboard)* and Your Footprint *(was: impact stats)*
+- **How:** Points for reports (+5), sign-offs (+5), confirmed fixes (+10), votes (+2) and drives (+15/+25). Badges unlock on your dashboard; the ward leaderboard ranks contributors. Your Footprint shows reports filed, fixes you caused, and backers received.
+
+### Alerts
+- **How:** The bell in the top bar: status changes, messages, Watch Zone hits, bulletins for your ward, drive decisions. Mirrored to email when SMTP is set.
+
+### Profile & appearance
+- **How:** Edit name, bio, ward and phone; change your password; pick **Light, Dark or System** appearance (also in the user menu).
 
 ---
 
-## For Admins
+## For officers
 
-### Analytics dashboard
-- **How to use:** The Admin Dashboard shows SLA compliance %, average resolution time, monthly report trends, and issue breakdowns by category, ward, and severity as charts.
-- **Value added:** A commissioner-level view of how the city is performing.
+### Verified accounts
+- **How:** Officers can't self-register into access. An admin provisions the account (government/employee ID, designation, phone, department) and hands over a one-time password; or an officer applies at `/register/authority` and waits for approval.
 
-### Users & Roles (RBAC management)
-- **How to use:** Admin → Users & Roles. See every user, promote/demote between Citizen ↔ Authority ↔ Admin (never your own account), and create authority accounts with the extended identity form. The generated temporary password is shown exactly once with a copy button.
-- **Value added:** Complete role lifecycle management from the UI — no database access needed.
+### Crew Queue *(was: work queue)* and Route Map *(was: map of my assignments)*
+- **How:** Your jobs, most urgent first: Red Alerts, then breached Fix Clocks, then the nearest deadlines. Each shows a live countdown. Switch to the map to plan a route.
 
-### Issue management
-- **How to use:** Admin → Manage Issues. Assign/reassign authorities, update statuses with notes, and **Mark Duplicate** (upvotes merge into the original, the duplicate closes pointing at it).
-- **Value added:** Keeps the issue database clean and every report actionable.
+### Job Flow *(was: accept → start → resolve)* and Site Updates *(was: progress updates)*
+- **How:** Accept, start work, post Site Updates (note + photo, visible publicly), then resolve with a proof photo.
 
-### Departments, wards & auto-assignment rules
-- **How to use:** Admin → Departments & Wards. Create departments and wards, then map each issue category to a department ("Road damage → Roads & Infrastructure").
-- **Value added:** New reports route themselves to the right department the moment they're filed.
+### Cost Ledger *(new)*
+- **How:** On a job you're assigned to, log what the fix cost: material, labour, equipment or contractor, with a description and an amount in rupees. You can delete your own entry within 24 hours. Officers in the same department can read the ledger.
+- **Why:** Every fix has a price tag. Rolled up, it powers **Budgets** and the spend charts in City Pulse.
 
-### SLA management & auto-escalation
-- **How to use:** Admin → SLA Management: set a resolution deadline on any issue. A background job checks every minute; breached issues are marked, auto-escalated with an escalation level, and every admin plus the assigned officer is notified.
-- **Value added:** Deadlines enforce themselves — no report can quietly rot.
+### Budgets *(new; officers see their own department)*
+- **How:** `/budgets` shows this month's budget against spend for your department, and the last six months.
 
-### Chronic issue detection
-- **How to use:** Issues reopened 2+ times get a ♻ Chronic badge and appear in the "Needs a rethink" list on the admin dashboard, with an alert when the threshold is crossed.
-- **Value added:** Surfaces problems where the *fix itself* is failing — different contractor, budget, or method needed.
+### Ward Bulletins (publishing)
+- **How:** Officers publish bulletins for their own department (the department is filled in automatically). Only admins can pin.
 
-### Audit log
-- **How to use:** Admin → Audit Log: every status change platform-wide with who, when, and why, paginated.
-- **Value added:** Full accountability trail for disputes and reviews.
+### Patrol Log *(was: field survey mode)*
+- **How:** Log a problem you spotted on your rounds; it's created already acknowledged and assigned to you.
 
-### CSV export
-- **How to use:** "⬇ Export issues (CSV)" on the admin dashboard downloads all issues with SLA and count columns.
-- **Value added:** Data goes into Excel/BI tools for reports the platform doesn't build.
+### Officer Scorecard *(was: performance scorecard)*
+- **How:** Average resolution time, fixes this month, Fix Clock hit rate and your average resident rating.
 
-### Emergency alerts
-- **How to use:** Automatic — every 🚨 emergency report notifies all admins the moment it's filed.
-- **Value added:** Life-safety issues skip every queue.
+---
+
+## For admins
+
+### Command Deck *(was: admin dashboard)*
+- **How:** Headline tiles, Fix Clock compliance, monthly reports, cases by category / ward / severity / status (all with table views), Repeat Offenders, and shortcuts to every tool. **Data Export** downloads every case as CSV.
+
+### Case Desk *(was: issue management)*, Dispatch *(was: assignments)*
+- **How:** Assign and reassign officers, change statuses with notes, merge duplicates (backers move to the original). Dispatch shows every officer's workload.
+
+### Fix Clock *(was: SLA management)*
+- **How:** Set a deadline on any case. A background job checks every minute; breaches are marked, escalated with a level, and alerted to admins and the officer.
+
+### Org & Routing *(was: departments, wards & rules)*
+- **How:** Create departments and wards, then map each category to a department so new cases route themselves.
+
+### Access Control *(was: users & roles)*
+- **How:** Promote or demote users (never yourself), approve officer applications, create officer accounts with a one-time password. Role changes take effect on the user's **next request**: the API reads the current role from the database on every call, not from the token.
+
+### Permission Matrix *(new)*
+- **How:** `/admin/access`: every permission, grouped and searchable, with which roles hold it. It's read from the API, so it's always the matrix the server actually enforces.
+
+### Budgets (managing)
+- **How:** Set each department's monthly budget inline; see who is over (more than 100%) or close (85% or more), and six months of spend against budget per department.
+
+### Ward Vote (running votes) and Bulletins (moderating)
+- **How:** Open a vote with 2–6 options (optionally linked to cases) and a closing time; close it early if needed. Pin or remove any bulletin.
+
+### Cleanup Drives (moderating)
+- **How:** The **Pending review** tab lists proposals; approve or reject with a note, and the organiser is told.
+
+### Paper Trail *(was: audit log)*
+- **How:** Two tabs. **Case timeline** has every status change with who, when and why. **Admin actions** has every privileged action (role changes, approvals, bulletins, votes, budgets, drive moderation, cost deletions, org and Fix Clock changes) with the actor, time, IP and details, filterable by kind.
+
+### Repeat Offenders *(was: chronic issues)*
+- **How:** Cases reopened twice or more appear on the Command Deck: the fix itself isn't holding.
+
+### Red Alert *(was: emergency alerts)*
+- **How:** Every Red Alert report forces CRITICAL severity and alerts all admins the moment it's filed.

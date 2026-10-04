@@ -1,564 +1,563 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  AlarmClock,
+  ChevronRight,
+  CircleCheck,
+  ClipboardList,
+  Clock,
+  Inbox,
+  List,
+  Map as MapIcon,
+  MapPin,
+  Siren,
+  Star,
+  TimerOff,
+} from "lucide-react";
 import api from "../../api/axios";
-import Notifications from "../../components/Notifications";
+import { FEATURES } from "../../brand";
+import { useAuth } from "../../context/auth";
 import IssueMap from "../../components/IssueMap";
+import {
+  BarList,
+  ChartFrame,
+  ColumnChart,
+  Meter,
+} from "../../components/charts";
+import {
+  CategoryChip,
+  EmptyState,
+  Loading,
+  PageHeader,
+  SectionHeader,
+  Segmented,
+  SeverityBadge,
+  StatTile,
+  StatusBadge,
+} from "../../components/ui";
+import { formatHours, formatNumber } from "../../lib/format";
+import { FixClockChip } from "../CaseKit";
+import { firstName, fixClock, greeting, useNow } from "../caseUtils";
 
-function slaInfo(assignment, now) {
-  const sla = assignment.issue?.sla;
+const DONE = ["RESOLVED", "CITIZEN_VERIFICATION", "CLOSED"];
 
-  if (!sla || assignment.completedAt) {
-    return null;
-  }
+function bucketOf(assignment) {
+  const status = assignment.issue?.status;
 
-  if (sla.breached) {
-    return { breached: true, label: "SLA breached" };
-  }
+  if (assignment.completedAt || DONE.includes(status)) return "RESOLVED";
+  if (!assignment.acceptedAt) return "PENDING";
 
-  const remainingMs =
-    new Date(sla.deadline).getTime() - now;
-
-  if (remainingMs <= 0) {
-    return { breached: true, label: "SLA breached" };
-  }
-
-  const hours = Math.floor(remainingMs / 3600000);
-  const minutes = Math.floor(
-    (remainingMs % 3600000) / 60000
-  );
-
-  const label =
-    hours >= 48
-      ? `${Math.floor(hours / 24)}d left`
-      : hours > 0
-        ? `${hours}h ${minutes}m left`
-        : `${minutes}m left`;
-
-  return {
-    breached: false,
-    urgent: remainingMs < 4 * 3600000,
-    remainingMs,
-    label,
-  };
+  return "ACTIVE";
 }
 
+function stageOf(assignment) {
+  const status = assignment.issue?.status;
+
+  if (status === "CLOSED") return "Signed off";
+  if (assignment.completedAt || DONE.includes(status)) {
+    return `Waiting for ${FEATURES.signOff}`;
+  }
+  if (!assignment.acceptedAt) return "Waiting for you to accept";
+  if (status === "REOPENED") return "Reopened: restart work";
+  if (status === "IN_PROGRESS") return "On site";
+  if (status === "ESCALATED" || status === "SLA_BREACHED") return "Escalated";
+
+  return "Accepted, not started";
+}
+
+// Most urgent first: Red Alerts, then the most overdue, then the
+// nearest deadline, then no deadline; finished jobs last.
+function urgency(row) {
+  if (row.bucket === "RESOLVED") return Number.MAX_SAFE_INTEGER;
+  if (row.issue.isEmergency) return -4e15 + (row.clock?.remainingMs ?? 0);
+  if (!row.clock) return Number.MAX_SAFE_INTEGER - 1;
+  if (row.clock.state === "breached") return -2e15 + row.clock.remainingMs;
+
+  return row.clock.remainingMs;
+}
+
+// Stage → short chart label, in pipeline order.
+const STAGE_ORDER = [
+  ["Waiting for you to accept", "To accept"],
+  ["Accepted, not started", "Not started"],
+  ["On site", "On site"],
+  ["Reopened: restart work", "Reopened"],
+  ["Escalated", "Escalated"],
+  [`Waiting for ${FEATURES.signOff}`, "To sign off"],
+  ["Signed off", "Signed off"],
+];
+
+function RatingStars({ value }) {
+  const rounded = Math.round(value ?? 0);
+
+  return (
+    <span className="cq-stars" aria-hidden="true">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <Star key={star} className={star <= rounded ? "is-on" : ""} />
+      ))}
+    </span>
+  );
+}
+
+const QUEUE_PAGE = 15;
+
 export default function AuthorityDashboard() {
+  const { user } = useAuth();
+  const now = useNow(30_000);
+
   const [assignments, setAssignments] = useState([]);
   const [performance, setPerformance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeFilter, setActiveFilter] = useState("ALL");
+  const [filter, setFilter] = useState("OPEN");
+  const [shown, setShown] = useState(QUEUE_PAGE);
   const [view, setView] = useState("list");
-  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const timer = setInterval(
-      () => setNow(Date.now()),
-      60000
-    );
+    let cancelled = false;
 
-    return () => clearInterval(timer);
-  }, []);
+    async function fetchQueue() {
+      const [assignRes, perfRes] = await Promise.allSettled([
+        api.get("/assignments/my"),
+        api.get("/dashboard/my-performance"),
+      ]);
 
-  useEffect(() => {
-    async function fetchAssignments() {
-      try {
-        const [assignRes, perfRes] = await Promise.all([
-          api.get("/assignments/my"),
-          api.get("/dashboard/my-performance"),
-        ]);
+      if (cancelled) return;
 
-        setAssignments(assignRes.data.assignments || []);
-        setPerformance(perfRes.data.performance || null);
-      } catch (error) {
-        console.error("Fetch assignments error:", error);
-
+      if (assignRes.status === "fulfilled") {
+        setAssignments(assignRes.value.data.assignments || []);
+      } else {
+        console.error("Fetch assignments error:", assignRes.reason);
         setError(
-          error.response?.data?.message ||
-            "Unable to load assignments."
+          assignRes.reason?.response?.data?.message ||
+            "Unable to load your jobs."
         );
-      } finally {
-        setLoading(false);
       }
+
+      if (perfRes.status === "fulfilled") {
+        setPerformance(perfRes.value.data.performance || null);
+      }
+
+      setLoading(false);
     }
 
-    fetchAssignments();
+    fetchQueue();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
-
-  function formatStatus(status) {
-    return status
-      ?.replace(/_/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (char) => char.toUpperCase());
-  }
-
-  function formatDate(date) {
-    if (!date) return "Not available";
-
-    return new Date(date).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }
-
-  function getAssignmentStage(assignment) {
-    const status = assignment.issue?.status;
-
-    if (assignment.completedAt || status === "RESOLVED") {
-      return "Resolved";
-    }
-
-    if (status === "IN_PROGRESS") {
-      return "In Progress";
-    }
-
-    if (assignment.acceptedAt || status === "ACKNOWLEDGED") {
-      return "Accepted";
-    }
-
-    return "Pending Acceptance";
-  }
-
-  const pending = assignments.filter(
-    (assignment) =>
-      !assignment.acceptedAt &&
-      !assignment.completedAt &&
-      assignment.issue?.status !== "RESOLVED"
-  ).length;
-
-  const active = assignments.filter(
-    (assignment) =>
-      !assignment.completedAt &&
-      (
-        assignment.issue?.status === "ACKNOWLEDGED" ||
-        assignment.issue?.status === "IN_PROGRESS"
-      )
-  ).length;
-
-  const resolved = assignments.filter(
-    (assignment) =>
-      assignment.completedAt ||
-      assignment.issue?.status === "RESOLVED"
-  ).length;
-
-  const filteredAssignments = assignments
-    .filter((assignment) => {
-      const status = assignment.issue?.status;
-
-      if (activeFilter === "PENDING") {
-        return (
-          !assignment.acceptedAt &&
-          !assignment.completedAt &&
-          status !== "RESOLVED"
-        );
-      }
-
-      if (activeFilter === "ACTIVE") {
-        return (
-          !assignment.completedAt &&
-          (
-            status === "ACKNOWLEDGED" ||
-            status === "IN_PROGRESS"
-          )
-        );
-      }
-
-      if (activeFilter === "RESOLVED") {
-        return (
-          assignment.completedAt ||
-          status === "RESOLVED"
-        );
-      }
-
-      return true;
-    })
-    .sort((a, b) => {
-      // Most urgent first: breached, then nearest
-      // deadline, then no-SLA, completed last.
-      const rank = (assignment) => {
-        if (assignment.completedAt) {
-          return Number.MAX_SAFE_INTEGER;
-        }
-
-        if (assignment.issue?.isEmergency) {
-          return -2;
-        }
-
-        const info = slaInfo(assignment, now);
-
-        if (!info) {
-          return Number.MAX_SAFE_INTEGER - 1;
-        }
-
-        if (info.breached) {
-          return -1;
-        }
-
-        return info.remainingMs;
-      };
-
-      return rank(a) - rank(b);
-    });
-
-  function handleFilter(filter) {
-    setActiveFilter(filter);
-  }
-
-  function getFilterTitle() {
-    if (activeFilter === "PENDING") {
-      return "Pending Acceptance";
-    }
-
-    if (activeFilter === "ACTIVE") {
-      return "Active Issues";
-    }
-
-    if (activeFilter === "RESOLVED") {
-      return "Resolved Issues";
-    }
-
-    return "Assigned Issues";
-  }
 
   if (loading) {
-    return (
-      <div className="page">
-        <div className="page-header">
-          <p className="eyebrow">AUTHORITY</p>
-          <h1>Authority Dashboard</h1>
-          <p>Manage and track your assigned civic issues.</p>
-        </div>
-
-        <div className="loading-block">
-          <span className="spinner" />
-          <span>Loading your assignments…</span>
-        </div>
-      </div>
-    );
+    return <Loading label={`Loading your ${FEATURES.crewQueue}…`} />;
   }
 
+  const rows = assignments
+    .filter((assignment) => assignment.issue)
+    .map((assignment) => {
+      const bucket = bucketOf(assignment);
+
+      return {
+        assignment,
+        issue: assignment.issue,
+        bucket,
+        stage: stageOf(assignment),
+        clock: fixClock(
+          {
+            sla: assignment.issue.sla,
+            status: assignment.issue.status,
+            createdAt: assignment.issue.createdAt,
+            done: bucket === "RESOLVED",
+          },
+          now
+        ),
+      };
+    })
+    .sort((a, b) => urgency(a) - urgency(b));
+
+  const counts = rows.reduce(
+    (acc, row) => ({ ...acc, [row.bucket]: acc[row.bucket] + 1 }),
+    { PENDING: 0, ACTIVE: 0, RESOLVED: 0 }
+  );
+  const open = rows.filter((row) => row.bucket !== "RESOLVED");
+  const breached = open.filter((row) => row.clock?.state === "breached");
+  const urgent = open.filter((row) => row.clock?.state === "urgent");
+
+  const matching = rows.filter((row) =>
+    filter === "OPEN" ? row.bucket !== "RESOLVED" : row.bucket === filter
+  );
+  // Officers accumulate years of finished jobs; show a page at a time.
+  const visible = matching.slice(0, shown);
+  const hiddenCount = matching.length - visible.length;
+
+  function chooseFilter(next) {
+    setFilter(next);
+    setShown(QUEUE_PAGE);
+  }
+  const mapIssues = visible
+    .map((row) => row.issue)
+    .filter(
+      (issue) =>
+        Number.isFinite(issue.latitude) && Number.isFinite(issue.longitude)
+    );
+
+  // Officer Scorecard
+  const stageRows = STAGE_ORDER.map(([stage, short]) => ({
+    key: stage,
+    label: short,
+    value: rows.filter((row) => row.stage === stage).length,
+  })).filter((row) => row.value > 0);
+
+  const series = (performance?.monthly ?? performance?.series ?? []).filter(
+    (point) => point && (point.month || point.label)
+  );
+
+  let lede = "Nothing open. New jobs land here the moment they're dispatched.";
+
+  if (open.length) {
+    const parts = [`${open.length} open ${open.length === 1 ? "job" : "jobs"}`];
+
+    if (breached.length) parts.push(`${breached.length} past the ${FEATURES.fixClock}`);
+    if (urgent.length) parts.push(`${urgent.length} due within 4 hours`);
+    if (counts.PENDING) parts.push(`${counts.PENDING} waiting for you to accept`);
+
+    lede = `${parts.join(" · ")}.`;
+  }
+
+  const filterLabel = (label, count) => (
+    <>
+      {label}
+      <span className="cq-count">{count}</span>
+    </>
+  );
+
   return (
-    <div className="page">
-      <div className="page-header admin-dash-header">
-        <div>
-          <p className="eyebrow">AUTHORITY</p>
+    <div className="page crew-queue">
+      <PageHeader
+        eyebrow={FEATURES.crewQueue}
+        title={`${greeting()}, ${firstName(user?.name, "officer")}`}
+        description={lede}
+      />
 
-          <h1>Authority Dashboard</h1>
+      {error && <div className="form-error">{error}</div>}
 
-          <p>
-            Manage and track civic issues assigned to you.
-          </p>
-        </div>
-
-        <div className="issue-card-actions">
-          <Link to="/authority/report">
-            <button type="button">
-              + Log field issue
-            </button>
-          </Link>
-
-          <Link to="/profile">
-            <button
-              type="button"
-              className="secondary-button"
-            >
-              My Profile
-            </button>
-          </Link>
-
-          <Link to="/">
-            <button
-              type="button"
-              className="secondary-button"
-            >
-              ⌂ Home
-            </button>
-          </Link>
-        </div>
-      </div>
-
-      <section className="stats-grid">
-        <button
-          type="button"
-          className={`stat-card stat-card-button ${
-            activeFilter === "ALL" ? "stat-card-active" : ""
-          }`}
-          onClick={() => handleFilter("ALL")}
-        >
-          <h2>{assignments.length}</h2>
-          <p>Total Assigned</p>
-        </button>
-
-        <button
-          type="button"
-          className={`stat-card stat-card-button ${
-            activeFilter === "PENDING" ? "stat-card-active" : ""
-          }`}
-          onClick={() => handleFilter("PENDING")}
-        >
-          <h2>{pending}</h2>
-          <p>Pending Acceptance</p>
-        </button>
-
-        <button
-          type="button"
-          className={`stat-card stat-card-button ${
-            activeFilter === "ACTIVE" ? "stat-card-active" : ""
-          }`}
-          onClick={() => handleFilter("ACTIVE")}
-        >
-          <h2>{active}</h2>
-          <p>Active Issues</p>
-        </button>
-
-        <button
-          type="button"
-          className={`stat-card stat-card-button ${
-            activeFilter === "RESOLVED" ? "stat-card-active" : ""
-          }`}
-          onClick={() => handleFilter("RESOLVED")}
-        >
-          <h2>{resolved}</h2>
-          <p>Resolved</p>
-        </button>
+      <section className="kpi-row" aria-label="Your jobs at a glance">
+        <StatTile
+          label="Open jobs"
+          value={formatNumber(open.length)}
+          hint={
+            counts.PENDING
+              ? `${counts.PENDING} to accept`
+              : "all accepted"
+          }
+          icon={ClipboardList}
+          tone="navy"
+        />
+        <StatTile
+          label="Due within 4 hours"
+          value={formatNumber(urgent.length)}
+          hint={`on the ${FEATURES.fixClock}`}
+          icon={AlarmClock}
+          tone="warning"
+        />
+        <StatTile
+          label={`Past the ${FEATURES.fixClock}`}
+          value={formatNumber(breached.length)}
+          hint={breached.length ? "escalated to admins" : "none overdue"}
+          icon={TimerOff}
+          tone="danger"
+        />
+        <StatTile
+          label="Fixed this month"
+          value={formatNumber(performance?.completedThisMonth ?? 0)}
+          hint={
+            performance?.completed != null
+              ? `${formatNumber(performance.completed)} all time`
+              : undefined
+          }
+          icon={CircleCheck}
+          tone="success"
+        />
       </section>
 
-      {performance && (
-        <section className="stats-grid insights-grid">
-          <div className="stat-card">
-            <h2>
-              {performance.avgResolutionHours ?? "—"}
-              {performance.avgResolutionHours != null &&
-                "h"}
-            </h2>
-            <p>My avg. resolution time</p>
-          </div>
-
-          <div className="stat-card">
-            <h2>{performance.completedThisMonth}</h2>
-            <p>Resolved this month</p>
-          </div>
-
-          <div className="stat-card">
-            <h2>
-              {performance.slaHitRate ?? "—"}
-              {performance.slaHitRate != null && "%"}
-            </h2>
-            <p>SLA hit rate</p>
-          </div>
-
-          <div className="stat-card">
-            <h2>
-              {performance.avgRating != null
-                ? `★ ${performance.avgRating}`
-                : "—"}
-            </h2>
-            <p>
-              Citizen rating
-              {performance.ratingsCount
-                ? ` (${performance.ratingsCount})`
-                : ""}
-            </p>
-          </div>
-        </section>
-      )}
-
-      {error && (
-        <div className="form-error">
-          {error}
-        </div>
-      )}
-
-      <Notifications />
-
-      {!error && assignments.length === 0 && (
-        <div className="empty-state">
-          <h2>No assignments yet</h2>
-
-          <p>
-            Issues assigned to you will appear here.
-          </p>
-        </div>
-      )}
-
-      {assignments.length > 0 && (
-        <section>
-          <div className="page-header">
-            <div>
-              <p className="eyebrow">MY WORK</p>
-
-              <h2>{getFilterTitle()}</h2>
-
-              <p>
-                {activeFilter === "ALL"
-                  ? "Select an issue to view its details and update its progress."
-                  : `Showing ${filteredAssignments.length} issue${
-                      filteredAssignments.length === 1 ? "" : "s"
-                    } in this category.`}
-              </p>
-            </div>
-
-            <div className="view-toggle">
-              <button
-                type="button"
-                className={
-                  view === "list" ? "active" : ""
-                }
-                onClick={() => setView("list")}
-              >
-                List
-              </button>
-
-              <button
-                type="button"
-                className={
-                  view === "map" ? "active" : ""
-                }
-                onClick={() => setView("map")}
-              >
-                Map
-              </button>
-            </div>
-
-            {activeFilter !== "ALL" && (
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => handleFilter("ALL")}
-              >
-                Show All Issues
-              </button>
-            )}
-          </div>
-
-          {view === "map" &&
-            filteredAssignments.length > 0 && (
-              <IssueMap
-                issues={filteredAssignments
-                  .map(
-                    (assignment) => assignment.issue
-                  )
-                  .filter(Boolean)}
-                linkBase="/authority/issues"
+      <div className="grid-main-side cq-layout">
+        <section className="card cq-queue" aria-labelledby="queue-title">
+          <SectionHeader
+            eyebrow="Your jobs"
+            title={<span id="queue-title">Most urgent first</span>}
+            actions={
+              <Segmented
+                label="View"
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: "list", label: "List", icon: List },
+                  { value: "map", label: FEATURES.routeMap, icon: MapIcon },
+                ]}
               />
-            )}
+            }
+          />
 
-          {filteredAssignments.length === 0 ? (
-            <div className="empty-state">
-              <h3>No {getFilterTitle().toLowerCase()}.</h3>
+          <div className="cq-filters">
+            <Segmented
+              label="Filter jobs"
+              value={filter}
+              onChange={chooseFilter}
+              options={[
+                { value: "OPEN", label: filterLabel("Open", open.length) },
+                { value: "PENDING", label: filterLabel("To accept", counts.PENDING) },
+                { value: "ACTIVE", label: filterLabel("Active", counts.ACTIVE) },
+                { value: "RESOLVED", label: filterLabel("Resolved", counts.RESOLVED) },
+              ]}
+            />
+          </div>
 
-              <p>
-                There are currently no issues in this category.
-              </p>
+          {rows.length === 0 && !error ? (
+            <EmptyState icon={Inbox} title="No jobs yet">
+              Cases dispatched to you show up here, sorted by how close
+              they are to their {FEATURES.fixClock}.
+            </EmptyState>
+          ) : visible.length === 0 ? (
+            <EmptyState
+              icon={Inbox}
+              title="Nothing here"
+              action={
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => chooseFilter("RESOLVED")}
+                >
+                  Show finished jobs
+                </button>
+              }
+            >
+              {filter === "OPEN"
+                ? "Nothing open. New jobs land here the moment they're dispatched."
+                : "No jobs in this view right now."}
+            </EmptyState>
+          ) : view === "map" ? (
+            <div className="cq-route">
+              <div className="cq-map">
+                {mapIssues.length > 0 ? (
+                  <IssueMap issues={mapIssues} linkBase="/authority/issues" />
+                ) : (
+                  <p className="empty-inline">None of these jobs has a pin.</p>
+                )}
+              </div>
 
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => handleFilter("ALL")}
-              >
-                View All Assigned Issues
-              </button>
+              <ol className="cq-stops" aria-label="Stops, most urgent first">
+                {visible.map((row, index) => (
+                  <li key={row.assignment.id}>
+                    <span className="cq-stop-num" aria-hidden="true">
+                      {index + 1}
+                    </span>
+                    <Link
+                      to={`/authority/issues/${row.issue.id}`}
+                      className="cq-stop-link"
+                    >
+                      <strong>{row.issue.title}</strong>
+                      <span>{row.issue.address || row.issue.ward?.name}</span>
+                    </Link>
+                    {row.clock && <FixClockChip clock={row.clock} />}
+                  </li>
+                ))}
+              </ol>
             </div>
-          ) : view === "map" ? null : (
-            <div className="complaints-list">
-              {filteredAssignments.map((assignment) => {
-                const issue = assignment.issue;
-
-                if (!issue) {
-                  return null;
-                }
-
-                const stage = getAssignmentStage(assignment);
-                const sla = slaInfo(assignment, now);
+          ) : (
+            <ul className="cq-list">
+              {visible.map((row) => {
+                const { assignment, issue, clock } = row;
+                const tone = issue.isEmergency
+                  ? "breached"
+                  : (clock?.state ?? "none");
 
                 return (
-                  <Link
-                    key={assignment.id}
-                    to={`/authority/issues/${issue.id}`}
-                    className="complaint-card"
-                  >
-                    <div className="complaint-card-header">
-                      <div>
-                        <h2>{issue.title}</h2>
-
-                        <p>
-                          {formatStatus(issue.category)}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`status-badge status-${issue.status
-                          ?.toLowerCase()
-                          .replace(/_/g, "-")}`}
-                      >
-                        {formatStatus(issue.status)}
-                      </span>
-                    </div>
-
-                    <p className="complaint-description">
-                      {issue.description ||
-                        "No description provided."}
-                    </p>
-
-                    <div className="complaint-meta">
-                      <span>
-                        Assigned{" "}
-                        {formatDate(assignment.assignedAt)}
-                      </span>
-
-                      <span>
-                        {stage}
-                      </span>
-
-                      {sla && (
-                        <span
-                          className={`sla-chip ${
-                            sla.breached
-                              ? "sla-chip-breached"
-                              : sla.urgent
-                                ? "sla-chip-urgent"
-                                : ""
-                          }`}
-                        >
-                          ⏱ {sla.label}
+                  <li key={assignment.id}>
+                    <Link
+                      to={`/authority/issues/${issue.id}`}
+                      className={`cq-job cq-job-${tone} ${
+                        row.bucket === "RESOLVED" ? "is-done" : ""
+                      }`}
+                    >
+                      <span className="cq-job-main">
+                        <span className="cq-job-chips">
+                          {row.bucket === "PENDING" && (
+                            <span className="chip chip-accent">New</span>
+                          )}
+                          {issue.isEmergency && (
+                            <span className="red-alert">
+                              <Siren aria-hidden="true" />
+                              {FEATURES.redAlert}
+                            </span>
+                          )}
+                          <StatusBadge status={issue.status} />
+                          {issue.category && (
+                            <CategoryChip category={issue.category} short />
+                          )}
+                          <SeverityBadge severity={issue.severity} />
                         </span>
-                      )}
-                    </div>
 
-                    {(assignment.department ||
-                      assignment.ward) && (
-                      <div className="complaint-meta">
-                        {assignment.department && (
-                          <span>
-                            Department:{" "}
-                            {assignment.department.name}
+                        <strong className="cq-job-title">{issue.title}</strong>
+
+                        <span className="meta-row">
+                          <span className="cq-stage">{row.stage}</span>
+                          {(issue.address || assignment.ward?.name) && (
+                            <span className="cq-job-place">
+                              <MapPin aria-hidden="true" />
+                              {issue.address || assignment.ward?.name}
+                            </span>
+                          )}
+                        </span>
+                      </span>
+
+                      <span className="cq-job-clock">
+                        {clock ? (
+                          <>
+                            <span className="cq-clock-big">
+                              {clock.state === "done"
+                                ? "Done"
+                                : clock.state === "breached"
+                                  ? "Overdue"
+                                  : clock.short}
+                            </span>
+                            <span className="cq-clock-sub">
+                              {clock.state === "done"
+                                ? clock.label
+                                : clock.state === "breached"
+                                  ? clock.label.replace("Breached · ", "")
+                                  : "left"}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="cq-clock-sub">
+                            <Clock aria-hidden="true" />
+                            No deadline
                           </span>
                         )}
+                      </span>
 
-                        {assignment.ward && (
-                          <span>
-                            Ward: {assignment.ward.name}
-                            {assignment.ward.code
-                              ? ` (${assignment.ward.code})`
-                              : ""}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {issue.address && (
-                      <p className="complaint-address">
-                        📍 {issue.address}
-                      </p>
-                    )}
-                  </Link>
+                      <ChevronRight className="cq-job-arrow" aria-hidden="true" />
+                    </Link>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
+          )}
+
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              className="btn-secondary btn-block cq-more"
+              onClick={() => setShown((count) => count + QUEUE_PAGE)}
+            >
+              Show {Math.min(QUEUE_PAGE, hiddenCount)} more
+              <span className="muted">({hiddenCount} left)</span>
+            </button>
           )}
         </section>
-      )}
+
+        <aside className="cq-side">
+          <section className="card cq-score" aria-labelledby="score-title">
+            <SectionHeader
+              eyebrow={FEATURES.scorecard}
+              title={<span id="score-title">How you're doing</span>}
+            />
+
+            {performance ? (
+              <>
+                <Meter
+                  label={`${FEATURES.fixClock} hit rate`}
+                  value={performance.slaHitRate ?? null}
+                />
+
+                <div className="cq-figures">
+                  <div>
+                    <span className="detail-label">Average fix</span>
+                    <strong>{formatHours(performance.avgResolutionHours)}</strong>
+                  </div>
+                  <div>
+                    <span className="detail-label">Citizen rating</span>
+                    <strong>
+                      {performance.avgRating != null
+                        ? Number(performance.avgRating).toFixed(1)
+                        : "—"}
+                      {performance.avgRating != null && (
+                        <RatingStars value={performance.avgRating} />
+                      )}
+                    </strong>
+                    <small>
+                      {performance.ratingsCount
+                        ? `${formatNumber(performance.ratingsCount)} ${
+                            performance.ratingsCount === 1 ? "rating" : "ratings"
+                          }`
+                        : "No ratings yet"}
+                    </small>
+                  </div>
+                  <div>
+                    <span className="detail-label">Assigned</span>
+                    <strong>{formatNumber(performance.totalAssigned ?? rows.length)}</strong>
+                  </div>
+                  <div>
+                    <span className="detail-label">Completed</span>
+                    <strong>{formatNumber(performance.completed ?? counts.RESOLVED)}</strong>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="empty-inline">
+                Your numbers appear after your first finished job.
+              </p>
+            )}
+          </section>
+
+          {series.length > 1 && (
+            <ChartFrame
+              title="Fixes per month"
+              subtitle="Jobs you resolved"
+              table={{
+                columns: [
+                  { key: "label", label: "Month" },
+                  { key: "value", label: "Fixes", numeric: true },
+                ],
+                rows: series.map((point) => ({
+                  label: point.month ?? point.label,
+                  value: point.completed ?? point.count ?? point.value ?? 0,
+                })),
+              }}
+            >
+              <ColumnChart
+                data={series.map((point, index) => ({
+                  label: point.month ?? point.label,
+                  value: point.completed ?? point.count ?? point.value ?? 0,
+                  seriesLabel: "Fixes",
+                  color:
+                    index === series.length - 1
+                      ? "var(--series-2)"
+                      : "var(--series-1)",
+                }))}
+                height={180}
+                ariaLabel="Fixes per month"
+              />
+            </ChartFrame>
+          )}
+
+          {stageRows.length > 0 && (
+            <ChartFrame
+              title="Where your jobs are"
+              subtitle="Every assignment, by stage"
+              table={{
+                columns: [
+                  { key: "label", label: "Stage" },
+                  { key: "value", label: "Jobs", numeric: true },
+                ],
+                rows: stageRows,
+              }}
+            >
+              <BarList data={stageRows} />
+            </ChartFrame>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

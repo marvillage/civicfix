@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma";
+import { reportCardGrade } from "./pulse.helpers";
 
 export async function getDashboardStats() {
   const [
@@ -505,13 +506,10 @@ export async function getAuditLog(
 // PUBLIC STATS — transparency page (no auth)
 // ─────────────────────────────────────────────
 
-function gradeFromScore(score: number) {
-  if (score >= 90) return "A";
-  if (score >= 75) return "B";
-  if (score >= 60) return "C";
-  if (score >= 40) return "D";
-  return "F";
-}
+// Ward grades use the shared report-card scale (A ≥ 90,
+// B ≥ 75, C ≥ 60, D ≥ 40, else F), the same one City Pulse
+// uses — see pulse.helpers.ts.
+export { gradeFromScore } from "./pulse.helpers";
 
 export async function getPublicStats() {
   const [total, resolvedOrClosed, open, wards] =
@@ -625,17 +623,6 @@ export async function getPublicStats() {
           ? (slaKept / withSLA.length) * 100
           : null;
 
-      const parts = [
-        resolutionRate,
-        slaCompliance,
-      ].filter((value): value is number => value !== null);
-
-      const score =
-        parts.length > 0
-          ? parts.reduce((a, b) => a + b, 0) /
-            parts.length
-          : null;
-
       return {
         id: ward.id,
         name: ward.name,
@@ -650,10 +637,10 @@ export async function getPublicStats() {
           slaCompliance !== null
             ? Math.round(slaCompliance)
             : null,
-        grade:
-          score !== null
-            ? gradeFromScore(score)
-            : null,
+        grade: reportCardGrade([
+          resolutionRate,
+          slaCompliance,
+        ]),
       };
     })
     .sort(

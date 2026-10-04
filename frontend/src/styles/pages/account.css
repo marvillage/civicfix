@@ -1,0 +1,324 @@
+/* =========================================================
+   ACCOUNT — Profile (identity, details, password, theme)
+========================================================= */
+
+.acct-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  align-items: start;
+  gap: 22px;
+}
+
+.acct-main {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+
+/* ---------- Identity card ---------- */
+
+.acct-id {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  padding: 0 22px 22px;
+  overflow: hidden;
+}
+
+.acct-cover {
+  position: relative;
+  width: calc(100% + 44px);
+  height: 92px;
+  margin: 0 -22px;
+  background:
+    radial-gradient(
+      120% 140% at 100% 0%,
+      color-mix(in srgb, var(--yellow-500) 28%, transparent),
+      transparent 55%
+    ),
+    var(--navy-800);
+}
+
+.acct-cover::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 6px;
+  background: var(--stripe);
+}
+
+.acct-avatar {
+  position: relative;
+  margin-top: -56px;
+  padding: 4px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.acct-avatar .avatar,
+.acct-avatar-img {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.acct-avatar-edit {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.acct-avatar-edit:hover {
+  background: var(--accent-hover);
+}
+
+.acct-avatar-edit svg {
+  width: 16px;
+  height: 16px;
+}
+
+.acct-name {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.acct-name h2 {
+  font-size: 23px;
+  overflow-wrap: anywhere;
+}
+
+.acct-name p {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.acct-name svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.acct-pending {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.acct-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.acct-bio {
+  color: var(--text-2);
+  font-size: 14.5px;
+}
+
+.acct-facts {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.acct-facts > div {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.acct-facts dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.acct-facts dt svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.acct-facts dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+/* Civic Cred block (citizens) */
+
+.acct-cred {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.acct-cred-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.acct-cred-head .eyebrow {
+  margin: 0;
+}
+
+.acct-cred-head strong {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.acct-cred-head strong span {
+  color: var(--text-3);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.acct-footprint {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acct-footprint li {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.acct-footprint svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent-text);
+}
+
+.acct-footprint strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-footprint span {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.acct-badge-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.acct-badge-count svg {
+  width: 15px;
+  height: 15px;
+  color: var(--accent-text);
+}
+
+/* ---------- Forms ---------- */
+
+.acct-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.acct-title svg {
+  width: 19px;
+  height: 19px;
+  color: var(--accent-text);
+}
+
+.account .form-row {
+  align-items: start;
+}
+
+.acct-count {
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--success);
+}
+
+.acct-match svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------- Appearance ---------- */
+
+.acct-theme {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+}
+
+.acct-theme .theme-chooser {
+  flex: 0 1 380px;
+}
+
+@media (max-width: 1080px) {
+  .acct-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .acct-theme .theme-chooser {
+    flex-basis: 100%;
+  }
+
+  .acct-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}

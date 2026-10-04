@@ -1,30 +1,54 @@
 import { prisma } from "../lib/prisma";
-import { IssueStatus } from "../generated/prisma/client";
+import { badRequest, paginate } from "../lib/http";
+import { haversineMeters } from "../lib/geo";
+import {
+  IssueCategory,
+  IssueStatus,
+  Prisma,
+} from "../generated/prisma/client";
 import { notifyIssueWatchers } from "./notification.service";
 
 // ─────────────────────────────────────────────
-// PUBLIC ISSUES
+// PUBLIC ISSUES — filtered, sorted, paginated
 // ─────────────────────────────────────────────
+
+// One list item. Light on purpose: the full timeline and
+// assignment records live on GET /issues/:id.
+export const ISSUE_SUMMARY_INCLUDE = {
+  department: true,
+  ward: true,
+  sla: true,
+  _count: {
+    select: {
+      upvotes: true,
+      complaints: true,
+    },
+  },
+} satisfies Prisma.IssueInclude;
+
+export type IssueSort = "newest" | "oldest" | "upvotes";
 
 export interface PublicIssueFilters {
   q?: string;
-  category?: string;
-  status?: string;
+  category?: IssueCategory;
+  status?: IssueStatus;
   wardId?: string;
   from?: string;
   to?: string;
-  sort?: string;
+  sort?: IssueSort;
+  limit?: number;
+  // newest/oldest: id of the last item on the previous page.
+  // upvotes: the numeric offset handed out as nextCursor.
+  cursor?: string;
 }
 
-export async function getPublicIssues(
-  filters: PublicIssueFilters = {}
-) {
-  const where: Record<string, unknown> = {
+function publicIssueWhere(
+  filters: PublicIssueFilters
+): Prisma.IssueWhereInput {
+  const where: Prisma.IssueWhereInput = {
     status: filters.status
-      ? (filters.status as IssueStatus)
-      : {
-          notIn: ["CLOSED", "DUPLICATE"],
-        },
+      ? filters.status
+      : { notIn: ["CLOSED", "DUPLICATE"] },
   };
 
   if (filters.category) {
@@ -37,29 +61,14 @@ export async function getPublicIssues(
 
   if (filters.q) {
     where.OR = [
-      {
-        title: {
-          contains: filters.q,
-          mode: "insensitive",
-        },
-      },
-      {
-        description: {
-          contains: filters.q,
-          mode: "insensitive",
-        },
-      },
-      {
-        address: {
-          contains: filters.q,
-          mode: "insensitive",
-        },
-      },
+      { title: { contains: filters.q, mode: "insensitive" } },
+      { description: { contains: filters.q, mode: "insensitive" } },
+      { address: { contains: filters.q, mode: "insensitive" } },
     ];
   }
 
   if (filters.from || filters.to) {
-    const createdAt: Record<string, Date> = {};
+    const createdAt: Prisma.DateTimeFilter = {};
 
     if (filters.from) {
       createdAt.gte = new Date(filters.from);
@@ -74,77 +83,88 @@ export async function getPublicIssues(
     where.createdAt = createdAt;
   }
 
-  const orderBy =
-    filters.sort === "upvotes"
-      ? {
-          upvotes: {
-            _count: "desc" as const,
-          },
-        }
-      : filters.sort === "oldest"
-        ? { createdAt: "asc" as const }
-        : { createdAt: "desc" as const };
+  return where;
+}
 
-  return prisma.issue.findMany({
-    where,
-    include: {
-      department: true,
-      ward: true,
-      sla: true,
-      statusHistory: {
-        orderBy: {
-          createdAt: "asc",
-        },
-      },
-      assignments: {
-        include: {
-          authority: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
+export async function getPublicIssues(
+  filters: PublicIssueFilters = {}
+) {
+  const limit = filters.limit ?? 50;
+  const where = publicIssueWhere(filters);
+
+  // Upvote counts move while someone pages, so there is no
+  // stable keyset: page by offset, with a full tie-break so
+  // the order itself is deterministic.
+  if (filters.sort === "upvotes") {
+    const offset = filters.cursor ? Number(filters.cursor) : 0;
+
+    const rows = await prisma.issue.findMany({
+      where,
+      include: ISSUE_SUMMARY_INCLUDE,
+      orderBy: [
+        { upvotes: { _count: "desc" } },
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
+      skip: offset,
+      take: limit + 1,
+    });
+
+    const hasMore = rows.length > limit;
+
+    return {
+      issues: hasMore ? rows.slice(0, limit) : rows,
+      nextCursor: hasMore ? String(offset + limit) : null,
+    };
+  }
+
+  // newest / oldest: keyset on (createdAt, id) after the
+  // cursor issue, so inserts never shift a page.
+  const direction = filters.sort === "oldest" ? "asc" : "desc";
+  const past = direction === "desc" ? "lt" : "gt";
+  let pageWhere = where;
+
+  if (filters.cursor) {
+    const anchor = await prisma.issue.findUnique({
+      where: { id: filters.cursor },
+      select: { id: true, createdAt: true },
+    });
+
+    if (!anchor) {
+      throw badRequest("cursor does not match any issue");
+    }
+
+    pageWhere = {
+      AND: [
+        where,
+        {
+          OR: [
+            { createdAt: { [past]: anchor.createdAt } },
+            {
+              createdAt: anchor.createdAt,
+              id: { [past]: anchor.id },
             },
-          },
-          department: true,
-          ward: true,
+          ],
         },
-      },
-      _count: {
-        select: {
-          upvotes: true,
-          complaints: true,
-        },
-      },
-    },
-    orderBy,
+      ],
+    };
+  }
+
+  const rows = await prisma.issue.findMany({
+    where: pageWhere,
+    include: ISSUE_SUMMARY_INCLUDE,
+    orderBy: [{ createdAt: direction }, { id: direction }],
+    take: limit + 1,
   });
+
+  const { items, nextCursor } = paginate(rows, limit);
+
+  return { issues: items, nextCursor };
 }
 
 // ─────────────────────────────────────────────
 // NEARBY OPEN ISSUES — duplicate detection
 // ─────────────────────────────────────────────
-
-function haversineMeters(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number
-) {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const R = 6371000;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLng / 2) ** 2;
-
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
 
 export async function getNearbyIssues(
   latitude: number,
@@ -158,7 +178,9 @@ export async function getNearbyIssues(
       status: {
         notIn: ["CLOSED", "DUPLICATE", "RESOLVED"],
       },
-      ...(category ? { category: category as any } : {}),
+      ...(category
+        ? { category: category as IssueCategory }
+        : {}),
     },
     include: {
       ward: true,
@@ -195,42 +217,149 @@ export async function getNearbyIssues(
 // ADMIN — ALL ISSUES
 // ─────────────────────────────────────────────
 
-export async function getAllIssues() {
-  return prisma.issue.findMany({
-    include: {
-      department: true,
-      ward: true,
-      sla: true,
-      statusHistory: {
-        orderBy: {
-          createdAt: "asc",
-        },
-      },
-      assignments: {
-        include: {
-          authority: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-            },
-          },
-          department: true,
-          ward: true,
-        },
-      },
-      _count: {
+// Statuses that still need work. Everything else (resolved,
+// awaiting sign-off, closed, duplicate) is "closed" on the Case Desk.
+export const OPEN_ISSUE_STATUSES: IssueStatus[] = [
+  "REPORTED",
+  "AI_VERIFIED",
+  "ASSIGNED",
+  "ACKNOWLEDGED",
+  "IN_PROGRESS",
+  "SLA_BREACHED",
+  "ESCALATED",
+  "REOPENED",
+];
+
+export type AdminIssueView = "open" | "closed" | "all";
+
+export interface AdminIssueFilters {
+  view: AdminIssueView;
+  q?: string;
+  category?: IssueCategory;
+  wardId?: string;
+  limit: number;
+  cursor?: string;
+}
+
+// Only what the Case Desk table and its dialogs read: no status
+// history, slim refs, officer identity without credentials.
+const ADMIN_LIST_INCLUDE = {
+  department: { select: { id: true, name: true } },
+  ward: { select: { id: true, name: true, code: true } },
+  sla: {
+    select: {
+      id: true,
+      durationMin: true,
+      deadline: true,
+      breached: true,
+      breachedAt: true,
+    },
+  },
+  assignments: {
+    orderBy: { assignedAt: "desc" },
+    select: {
+      id: true,
+      assignedAt: true,
+      acceptedAt: true,
+      completedAt: true,
+      authority: {
         select: {
-          upvotes: true,
-          complaints: true,
+          id: true,
+          name: true,
+          email: true,
+          designation: true,
+          avatarUrl: true,
         },
       },
     },
-    orderBy: {
-      createdAt: "desc",
+  },
+  _count: {
+    select: {
+      upvotes: true,
+      complaints: true,
     },
-  });
+  },
+} satisfies Prisma.IssueInclude;
+
+function viewWhere(view: AdminIssueView): Prisma.IssueWhereInput {
+  if (view === "open") return { status: { in: OPEN_ISSUE_STATUSES } };
+  if (view === "closed") return { status: { notIn: OPEN_ISSUE_STATUSES } };
+  return {};
+}
+
+// Admin Case Desk list: server-side filters + keyset pagination on
+// (createdAt desc, id desc), so the payload stays bounded no matter
+// how many years of cases are on file.
+export async function getAllIssues(filters: AdminIssueFilters) {
+  const where: Prisma.IssueWhereInput = {
+    ...viewWhere(filters.view),
+    ...(filters.category ? { category: filters.category } : {}),
+    ...(filters.wardId ? { wardId: filters.wardId } : {}),
+    ...(filters.q
+      ? {
+          OR: [
+            { title: { contains: filters.q, mode: "insensitive" } },
+            { address: { contains: filters.q, mode: "insensitive" } },
+            { id: { startsWith: filters.q } },
+            {
+              assignments: {
+                some: {
+                  authority: {
+                    name: { contains: filters.q, mode: "insensitive" },
+                  },
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  let pageWhere = where;
+
+  if (filters.cursor) {
+    const anchor = await prisma.issue.findUnique({
+      where: { id: filters.cursor },
+      select: { id: true, createdAt: true },
+    });
+
+    if (!anchor) {
+      throw badRequest("Unknown cursor");
+    }
+
+    pageWhere = {
+      AND: [
+        where,
+        {
+          OR: [
+            { createdAt: { lt: anchor.createdAt } },
+            { createdAt: anchor.createdAt, id: { lt: anchor.id } },
+          ],
+        },
+      ],
+    };
+  }
+
+  const [rows, total, open, all] = await Promise.all([
+    prisma.issue.findMany({
+      where: pageWhere,
+      include: ADMIN_LIST_INCLUDE,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: filters.limit + 1,
+    }),
+    prisma.issue.count({ where }),
+    prisma.issue.count({ where: viewWhere("open") }),
+    prisma.issue.count(),
+  ]);
+
+  const { items, nextCursor } = paginate(rows, filters.limit);
+
+  return {
+    issues: items,
+    nextCursor,
+    total,
+    totals: { open, closed: all - open, all },
+  };
 }
 
 // ─────────────────────────────────────────────

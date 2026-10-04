@@ -1,17 +1,127 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import {
+  AlertTriangle,
+  BadgeCheck,
+  Building2,
+  CalendarDays,
+  Check,
+  CircleCheck,
+  ClipboardCheck,
+  ExternalLink,
+  HardHat,
+  MapPin,
+  MessageSquarePlus,
+  Mic,
+  Play,
+  Radar,
+  Recycle,
+  RotateCcw,
+  Siren,
+  ThumbsUp,
+  Users,
+} from "lucide-react";
 import api from "../../api/axios";
+import { FEATURES } from "../../brand";
+import { useAuth } from "../../context/auth";
 import CommentsSection from "../../components/CommentsSection";
+import CostLedger from "../../components/CostLedger";
 import IssueChat from "../../components/IssueChat";
 import PhotoGallery from "../../components/PhotoGallery";
+import { Meter } from "../../components/charts";
 import {
-  EmergencyBanner,
-  ChronicBadge,
-  VoiceNotes,
-} from "../../components/IssueExtras";
+  CategoryChip,
+  Loading,
+  PageHeader,
+  SectionHeader,
+  Segmented,
+  SeverityBadge,
+  StatusBadge,
+} from "../../components/ui";
+import { formatDate, formatDateTime, formatNumber, timeAgo } from "../../lib/format";
+import {
+  BackLink,
+  CaseTimeline,
+  FixClockChip,
+  FixClockPanel,
+  PhotoPicker,
+} from "../CaseKit";
+import { currentAssignment, fixClock, useNow } from "../caseUtils";
+
+// History entry with `status` (latest by default, or the first one),
+// optionally only after `after`.
+function historyAt(history, status, after, { first = false } = {}) {
+  const floor = after ? new Date(after).getTime() : -Infinity;
+  const list = first ? [...(history ?? [])] : [...(history ?? [])].reverse();
+
+  return list.find(
+    (entry) =>
+      entry.status === status && new Date(entry.createdAt).getTime() >= floor
+  );
+}
+
+function stageCopy({ assignment, status, isMine, reopenNote }) {
+  if (!assignment) {
+    return {
+      title: "Not assigned yet",
+      text: "An admin hasn't dispatched this case to an officer.",
+    };
+  }
+
+  if (status === "CLOSED") {
+    return {
+      title: "Signed off. Job closed.",
+      text: "The citizen confirmed the fix. Nice work.",
+    };
+  }
+
+  if (assignment.completedAt || status === "RESOLVED") {
+    return {
+      title: `Resolved. Waiting for ${FEATURES.signOff}.`,
+      text: "The citizen compares your proof photo with their report, then signs off or reopens.",
+    };
+  }
+
+  if (!assignment.acceptedAt) {
+    return {
+      title: isMine ? "New job: accept it to get going" : "Waiting for the officer to accept",
+      text: "Accepting tells the citizen someone is on it.",
+    };
+  }
+
+  if (status === "REOPENED") {
+    return {
+      title: "Reopened by the citizen",
+      text: reopenNote
+        ? `“${reopenNote}”`
+        : "The citizen says it isn't fixed yet. Start work again when the crew is back on site.",
+    };
+  }
+
+  if (status === "IN_PROGRESS") {
+    return {
+      title: "On site",
+      text: `Keep the citizen posted with ${FEATURES.siteUpdates}, then resolve with a proof photo.`,
+    };
+  }
+
+  if (status === "ESCALATED" || status === "SLA_BREACHED") {
+    return {
+      title: `Past the ${FEATURES.fixClock}`,
+      text: "This case was escalated. An admin will review it; message the citizen on the Direct Line if you need access.",
+    };
+  }
+
+  return {
+    title: "Accepted. Start when you're on site.",
+    text: "Starting work moves the case to In progress for everyone watching it.",
+  };
+}
 
 export default function AuthorityIssueDetails() {
   const { id } = useParams();
+  const { user, can } = useAuth();
+  const now = useNow(30_000);
 
   const [issue, setIssue] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,80 +131,60 @@ export default function AuthorityIssueDetails() {
   const [actionError, setActionError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const [resolveNote, setResolveNote] = useState("");
-  const [resolveProof, setResolveProof] = useState(null);
-
+  const [workTab, setWorkTab] = useState("update");
   const [progressNote, setProgressNote] = useState("");
-  const [progressPhoto, setProgressPhoto] = useState(null);
+  const [progressPhotos, setProgressPhotos] = useState([]);
   const [postingProgress, setPostingProgress] = useState(false);
+  const [resolveNote, setResolveNote] = useState("");
+  const [resolveProof, setResolveProof] = useState([]);
 
-  async function fetchIssue() {
-    try {
-      setError("");
-
-      const response = await api.get(`/issues/${id}`);
-
-      setIssue(response.data.issue);
-    } catch (error) {
-      console.error("Fetch issue error:", error);
-
-      setError(
-        error.response?.data?.message ||
-          "Unable to load issue."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Bumped after every Job Flow action to refetch the case.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    if (id) {
-      fetchIssue();
+    if (!id) return undefined;
+
+    let cancelled = false;
+
+    async function fetchIssue() {
+      try {
+        const response = await api.get(`/issues/${id}`);
+
+        if (cancelled) return;
+
+        setError("");
+        setIssue(response.data.issue);
+      } catch (fetchError) {
+        console.error("Fetch issue error:", fetchError);
+
+        if (!cancelled) {
+          setError(
+            fetchError.response?.data?.message || "Unable to load this case."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-  }, [id]);
 
-  function formatStatus(status) {
-    return status
-      ?.replace(/_/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (char) =>
-        char.toUpperCase()
-      );
-  }
+    fetchIssue();
 
-  function formatDate(date) {
-    if (!date) {
-      return "Not available";
-    }
+    return () => {
+      cancelled = true;
+    };
+  }, [id, reloadKey]);
 
-    return new Date(date).toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  function getStatusClass(status) {
-    return `status-badge status-${status
-      ?.toLowerCase()
-      .replace(/_/g, "-")}`;
-  }
-
+  const latest = currentAssignment(issue);
   const assignment =
-    issue?.assignments?.[0] || null;
+    issue?.assignments?.find(
+      (item) => item.authorityId === user?.id && !item.completedAt
+    ) ?? latest;
+  const isMine = !!assignment && assignment.authorityId === user?.id;
 
-  async function performAssignmentAction(
-    action,
-    successMessage,
-    body
-  ) {
+  async function performAssignmentAction(action, successMessage, body) {
     if (!assignment) {
-      setActionError(
-        "No assignment found for this issue."
-      );
-      return;
+      setActionError("No assignment found for this case.");
+      return false;
     }
 
     setActionLoading(true);
@@ -107,50 +197,28 @@ export default function AuthorityIssueDetails() {
         body
       );
 
-      setSuccess(
-        response.data.message ||
-          successMessage
-      );
+      setSuccess(response.data.message || successMessage);
+      setReloadKey((key) => key + 1);
 
-      await fetchIssue();
-    } catch (error) {
-      console.error(
-        `${action} assignment error:`,
-        error
-      );
+      return true;
+    } catch (actionFailure) {
+      console.error(`${action} assignment error:`, actionFailure);
 
       setActionError(
-        error.response?.data?.message ||
-          `Unable to ${action} assignment.`
+        actionFailure.response?.data?.message ||
+          `Unable to ${action} this job.`
       );
+
+      return false;
     } finally {
       setActionLoading(false);
     }
   }
 
-  function handleAccept() {
-  console.log("ACCEPT BUTTON CLICKED");
-  console.log("CURRENT ASSIGNMENT:", assignment);
-
-  performAssignmentAction(
-    "accept",
-    "Assignment accepted successfully."
-  );
-}
-
-  function handleStart() {
-    performAssignmentAction(
-      "start",
-      "Work started successfully."
-    );
-  }
-
   async function handleProgressUpdate(event) {
     event.preventDefault();
 
-    if (!assignment || !progressNote.trim()) {
-      return;
-    }
+    if (!assignment || !progressNote.trim()) return;
 
     setPostingProgress(true);
     setActionError("");
@@ -159,32 +227,29 @@ export default function AuthorityIssueDetails() {
     const formData = new FormData();
     formData.append("note", progressNote.trim());
 
-    if (progressPhoto) {
-      formData.append("photo", progressPhoto);
+    if (progressPhotos[0]) {
+      formData.append("photo", progressPhotos[0]);
     }
 
     try {
-      await api.post(
-        `/assignments/${assignment.id}/progress`,
-        formData
-      );
+      await api.post(`/assignments/${assignment.id}/progress`, formData);
 
-      setSuccess("Progress update posted.");
+      setSuccess("Site update posted. The citizen has been notified.");
       setProgressNote("");
-      setProgressPhoto(null);
+      setProgressPhotos([]);
 
-      await fetchIssue();
-    } catch (error) {
+      setReloadKey((key) => key + 1);
+    } catch (progressError) {
       setActionError(
-        error.response?.data?.message ||
-          "Unable to post the progress update."
+        progressError.response?.data?.message ||
+          "Unable to post the site update."
       );
     } finally {
       setPostingProgress(false);
     }
   }
 
-  function handleResolve(event) {
+  async function handleResolve(event) {
     event.preventDefault();
 
     const formData = new FormData();
@@ -193,761 +258,545 @@ export default function AuthorityIssueDetails() {
       formData.append("note", resolveNote.trim());
     }
 
-    if (resolveProof) {
-      formData.append("proof", resolveProof);
+    if (resolveProof[0]) {
+      formData.append("proof", resolveProof[0]);
     }
 
-    performAssignmentAction(
+    const done = await performAssignmentAction(
       "resolve",
-      "Issue resolved successfully.",
+      "Marked resolved. The citizen has been asked to sign off.",
       formData
     );
 
-    setResolveNote("");
-    setResolveProof(null);
+    if (done) {
+      setResolveNote("");
+      setResolveProof([]);
+    }
   }
 
   if (loading) {
-    return (
-      <div className="page">
-        <div className="loading-block">
-          <span className="spinner" />
-          <span>Loading issue…</span>
-        </div>
-      </div>
-    );
+    return <Loading label="Opening the Case File…" />;
   }
 
   if (error || !issue) {
     return (
       <div className="page">
-        <div className="page-header">
-          <Link to="/authority">
-            ‹ Back to Authority Dashboard
-          </Link>
-
-          <p className="eyebrow">
-            AUTHORITY ISSUE
-          </p>
-
-          <h1>Issue</h1>
-        </div>
-
-        <div className="form-error">
-          {error || "Issue not found."}
-        </div>
+        <BackLink to="/authority">{FEATURES.crewQueue}</BackLink>
+        <PageHeader eyebrow={FEATURES.caseFile} title="Case not found" />
+        <div className="form-error">{error || "This case doesn't exist."}</div>
       </div>
     );
   }
 
-  const isAccepted =
-    !!assignment?.acceptedAt;
+  const status = issue.status;
+  const history = issue.statusHistory ?? [];
+  const isAccepted = !!assignment?.acceptedAt;
+  const isCompleted = !!assignment?.completedAt;
 
-  const isCompleted =
-    !!assignment?.completedAt;
-
-  const issueStatus = issue.status;
-
-  const canAccept =
-    assignment &&
-    !isAccepted &&
-    !isCompleted;
-
+  const canAccept = isMine && !isAccepted && !isCompleted;
   const canStart =
-    assignment &&
+    isMine &&
     isAccepted &&
     !isCompleted &&
-    issueStatus === "ACKNOWLEDGED";
+    (status === "ACKNOWLEDGED" || status === "REOPENED");
+  const canWork =
+    isMine && isAccepted && !isCompleted && status === "IN_PROGRESS";
 
-  const canResolve =
-    assignment &&
-    isAccepted &&
-    !isCompleted &&
-    issueStatus === "IN_PROGRESS";
+  const reopened = historyAt(history, "REOPENED");
+  const startedAt = historyAt(history, "IN_PROGRESS", reopened?.createdAt, {
+    first: true,
+  });
+  const resolvedAt =
+    assignment?.completedAt ??
+    historyAt(history, "RESOLVED", reopened?.createdAt)?.createdAt;
+
+  const steps = [
+    { label: "Assigned", at: assignment?.assignedAt, icon: ClipboardCheck },
+    { label: "Accepted", at: assignment?.acceptedAt, icon: Check },
+    { label: "On site", at: startedAt?.createdAt, icon: HardHat },
+    { label: "Resolved", at: resolvedAt, icon: CircleCheck },
+    {
+      label: FEATURES.signOff,
+      at: status === "CLOSED" ? historyAt(history, "CLOSED")?.createdAt : null,
+      icon: BadgeCheck,
+    },
+  ];
+  const currentStep = steps.findIndex((step) => !step.at);
+
+  const stage = stageCopy({
+    assignment,
+    status,
+    isMine,
+    reopenNote: status === "REOPENED" ? reopened?.note : null,
+  });
+
+  const clock = fixClock(
+    {
+      sla: issue.sla,
+      status,
+      createdAt: issue.createdAt,
+      done: isCompleted,
+    },
+    now
+  );
+
+  const photos = (issue.complaints ?? []).flatMap((complaint) =>
+    complaint.photos?.length
+      ? complaint.photos
+      : [complaint.imageUrl].filter(Boolean)
+  );
+  const voiceNotes = (issue.complaints ?? []).filter(
+    (complaint) => complaint.audioUrl
+  );
+  const reportCount = issue._count?.complaints ?? issue.complaints?.length ?? 0;
+  const confidence =
+    issue.aiConfidence != null ? Math.round(issue.aiConfidence * 100) : null;
+
+  const canLogCosts = can("cost:log") && latest?.authorityId === user?.id;
+  const canReadCosts = can("cost:read") || canLogCosts;
+  const hasCoords = issue.latitude != null && issue.longitude != null;
 
   return (
-    <div className="page">
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+    <div className="page case-file job-file">
+      <BackLink to="/authority">{FEATURES.crewQueue}</BackLink>
 
-      <div className="page-header">
-        <Link to="/authority">
-          ‹ Back to Authority Dashboard
-        </Link>
-
-        <p className="eyebrow">
-          AUTHORITY ISSUE
-        </p>
-
-        <div className="issue-detail-title-row">
-          <div>
-            <h1>
-              {issue.title || "Civic Issue"}
-            </h1>
-
-            <p>
-              Reported on{" "}
-              {formatDate(issue.createdAt)}{" "}
-              <ChronicBadge issue={issue} />
-            </p>
-          </div>
-
-          <span className={getStatusClass(issue.status)}>
-            {formatStatus(issue.status)}
+      <PageHeader eyebrow={FEATURES.caseFile} title={issue.title || "Untitled case"}>
+        <div className="case-head-meta">
+          <StatusBadge status={status} />
+          {issue.isEmergency && (
+            <span className="red-alert">
+              <Siren aria-hidden="true" />
+              {FEATURES.redAlert}
+            </span>
+          )}
+          {issue.category && <CategoryChip category={issue.category} />}
+          <SeverityBadge severity={issue.severity} />
+          {(issue.reopenCount || 0) >= 2 && (
+            <span className="chip chip-warning">
+              <Recycle aria-hidden="true" />
+              Reopened {issue.reopenCount}×
+            </span>
+          )}
+          <span className="case-head-when">
+            <CalendarDays aria-hidden="true" />
+            Reported {formatDate(issue.createdAt)} · {timeAgo(issue.createdAt, now)}
           </span>
         </div>
-      </div>
-
-      <EmergencyBanner issue={issue} />
-
-      {issue.complaints?.length > 0 && (
-        <section className="complaint-image-section">
-          <div className="section-heading">
-            <h2>Reported evidence</h2>
-          </div>
-
-          <PhotoGallery
-            photos={issue.complaints.flatMap(
-              (complaint) =>
-                complaint.photos?.length
-                  ? complaint.photos
-                  : [complaint.imageUrl]
-            )}
-            alt={issue.title}
-          />
-
-          <VoiceNotes complaints={issue.complaints} />
-        </section>
-      )}
-
-      {/* =====================================================
-          MESSAGES
-      ===================================================== */}
+      </PageHeader>
 
       {success && (
-        <div className="form-success">
+        <div className="form-success" role="status">
           {success}
         </div>
       )}
 
       {actionError && (
-        <div className="form-error">
+        <div className="form-error" role="alert">
           {actionError}
         </div>
       )}
 
-      {/* =====================================================
-          ASSIGNMENT & WORKFLOW
-      ===================================================== */}
+      <section
+        className={`card jobflow ${status === "REOPENED" ? "is-reopened" : ""}`}
+        aria-labelledby="jobflow-title"
+      >
+        <div className="jobflow-head">
+          <div>
+            <p className="eyebrow">{FEATURES.jobFlow}</p>
+            <h2 id="jobflow-title">{stage.title}</h2>
+            <p className="jobflow-text">{stage.text}</p>
+          </div>
+          {clock && <FixClockChip clock={clock} long />}
+        </div>
 
-      {assignment && (
-        <section className="details-card assignment-card">
-          <p className="eyebrow">
-            ASSIGNMENT
-          </p>
+        {assignment && (
+          <ol className="jobflow-steps">
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              const state = step.at
+                ? "is-done"
+                : index === currentStep
+                  ? "is-current"
+                  : "";
 
-          <div className="assignment-header">
-            <div>
-              <h2>
-                {assignment.authority?.name ||
-                  "Assigned Authority"}
-              </h2>
+              return (
+                <li
+                  key={step.label}
+                  className={`jobflow-step ${state}`}
+                  aria-current={index === currentStep ? "step" : undefined}
+                >
+                  <span className="jobflow-dot" aria-hidden="true">
+                    {step.at ? <Check /> : <Icon />}
+                  </span>
+                  <span className="jobflow-label">
+                    <strong>{step.label}</strong>
+                    <small>
+                      {step.at
+                        ? formatDateTime(step.at)
+                        : index === currentStep
+                          ? "Up next"
+                          : "Not yet"}
+                    </small>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
 
-              <p>
-                {assignment.authority?.email ||
-                  "Authority email unavailable"}
-              </p>
-            </div>
-
-            <span
-              className={
-                isCompleted
-                  ? "workflow-badge workflow-complete"
-                  : isAccepted
-                  ? "workflow-badge workflow-active"
-                  : "workflow-badge workflow-pending"
+        {canAccept && (
+          <div className="jobflow-action">
+            <button
+              type="button"
+              className="btn-accent btn-lg"
+              onClick={() =>
+                performAssignmentAction(
+                  "accept",
+                  "Job accepted. The citizen knows you're on it."
+                )
               }
+              disabled={actionLoading}
             >
-              {isCompleted
-                ? "Completed"
-                : isAccepted
-                ? "Accepted"
-                : "Pending Acceptance"}
-            </span>
+              {actionLoading ? (
+                <span className="spinner" aria-hidden="true" />
+              ) : (
+                <Check aria-hidden="true" />
+              )}
+              {actionLoading ? "Accepting…" : "Accept job"}
+            </button>
           </div>
+        )}
 
-          <div className="details-grid">
-            <div className="detail-item">
-              <span>Assigned</span>
-
-              <strong>
-                {formatDate(
-                  assignment.assignedAt
-                )}
-              </strong>
-            </div>
-
-            <div className="detail-item">
-              <span>Acceptance</span>
-
-              <strong>
-                {isAccepted
-                  ? "Accepted"
-                  : "Pending"}
-              </strong>
-            </div>
-
-            {assignment.acceptedAt && (
-              <div className="detail-item">
-                <span>Accepted At</span>
-
-                <strong>
-                  {formatDate(
-                    assignment.acceptedAt
-                  )}
-                </strong>
-              </div>
-            )}
-
-            {assignment.completedAt && (
-              <div className="detail-item">
-                <span>Completed At</span>
-
-                <strong>
-                  {formatDate(
-                    assignment.completedAt
-                  )}
-                </strong>
-              </div>
-            )}
-
-            {assignment.department && (
-              <div className="detail-item">
-                <span>Department</span>
-
-                <strong>
-                  {assignment.department.name}
-                </strong>
-              </div>
-            )}
-
-            {assignment.ward && (
-              <div className="detail-item">
-                <span>Ward</span>
-
-                <strong>
-                  {assignment.ward.name}
-                  {assignment.ward.code
-                    ? ` (${assignment.ward.code})`
-                    : ""}
-                </strong>
-              </div>
-            )}
+        {canStart && (
+          <div className="jobflow-action">
+            <button
+              type="button"
+              className="btn-accent btn-lg"
+              onClick={() =>
+                performAssignmentAction(
+                  "start",
+                  "Work started. The case is now In progress."
+                )
+              }
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <span className="spinner" aria-hidden="true" />
+              ) : status === "REOPENED" ? (
+                <RotateCcw aria-hidden="true" />
+              ) : (
+                <Play aria-hidden="true" />
+              )}
+              {actionLoading
+                ? "Starting…"
+                : status === "REOPENED"
+                  ? "Restart work"
+                  : "Start work"}
+            </button>
           </div>
+        )}
 
-          <div className="assignment-actions">
-            {canAccept && (
-              <button
-                type="button"
-                className="workflow-primary-button"
-                onClick={handleAccept}
-                disabled={actionLoading}
-              >
-                {actionLoading
-                  ? "Processing..."
-                  : "Accept Assignment"}
-              </button>
-            )}
+        {canWork && (
+          <div className="jobflow-work">
+            <Segmented
+              label="What are you doing?"
+              value={workTab}
+              onChange={setWorkTab}
+              options={[
+                { value: "update", label: "Post a site update", icon: MessageSquarePlus },
+                { value: "resolve", label: "Mark resolved", icon: CircleCheck },
+              ]}
+            />
 
-            {canStart && (
-              <button
-                type="button"
-                className="workflow-primary-button"
-                onClick={handleStart}
-                disabled={actionLoading}
-              >
-                {actionLoading
-                  ? "Starting..."
-                  : "Start Work"}
-              </button>
-            )}
-
-            {canResolve && (
-              <form
-                onSubmit={handleProgressUpdate}
-                className="resolve-form progress-form"
-              >
-                <div className="form-group">
-                  <label htmlFor="progress-note">
-                    Post a progress update
-                  </label>
-
+            {workTab === "update" ? (
+              <form onSubmit={handleProgressUpdate} className="jobflow-form">
+                <div className="field">
+                  <label htmlFor="progress-note">What happened on site?</label>
                   <textarea
                     id="progress-note"
                     value={progressNote}
-                    onChange={(event) =>
-                      setProgressNote(
-                        event.target.value
-                      )
-                    }
-                    placeholder="e.g. Material delivered, patching starts tomorrow morning..."
+                    onChange={(event) => setProgressNote(event.target.value)}
+                    placeholder="e.g. Material delivered. Patching starts tomorrow at 7 am."
                     rows={3}
                     disabled={postingProgress}
                   />
+                  <span className="field-hint">
+                    The citizen and everyone backing this case get it as an alert.
+                  </span>
                 </div>
 
-                <div className="form-group">
-                  <label htmlFor="progress-photo">
-                    Photo (optional)
-                  </label>
-
-                  <input
+                <div className="field">
+                  <span className="jobflow-label-text">Photo (optional)</span>
+                  <PhotoPicker
                     id="progress-photo"
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) =>
-                      setProgressPhoto(
-                        event.target.files?.[0] ||
-                          null
-                      )
-                    }
-                    disabled={postingProgress}
+                    files={progressPhotos}
+                    onChange={setProgressPhotos}
+                    max={1}
+                    label="Add a site photo"
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  className="workflow-primary-button"
-                  disabled={
-                    postingProgress ||
-                    !progressNote.trim()
-                  }
-                >
-                  {postingProgress
-                    ? "Posting…"
-                    : "Post update"}
-                </button>
+                <div className="button-row">
+                  <button
+                    type="submit"
+                    disabled={postingProgress || !progressNote.trim()}
+                  >
+                    {postingProgress ? (
+                      <span className="spinner" aria-hidden="true" />
+                    ) : (
+                      <MessageSquarePlus aria-hidden="true" />
+                    )}
+                    {postingProgress ? "Posting…" : "Post update"}
+                  </button>
+                </div>
               </form>
-            )}
-
-            {canResolve && (
-              <form
-                onSubmit={handleResolve}
-                className="resolve-form"
-              >
-                <div className="form-group">
-                  <label htmlFor="resolve-note">
-                    Resolution Note
-                  </label>
-
+            ) : (
+              <form onSubmit={handleResolve} className="jobflow-form">
+                <div className="field">
+                  <label htmlFor="resolve-note">What did the crew do?</label>
                   <textarea
                     id="resolve-note"
                     value={resolveNote}
-                    onChange={(event) =>
-                      setResolveNote(
-                        event.target.value
-                      )
-                    }
-                    placeholder="Describe the work completed..."
-                    rows={4}
+                    onChange={(event) => setResolveNote(event.target.value)}
+                    placeholder="e.g. Relaid 14 slabs on a fresh sand bed and levelled the edge."
+                    rows={3}
                     disabled={actionLoading}
                   />
                 </div>
 
-                <div className="form-group">
-                  <label htmlFor="resolve-proof">
-                    Photo of the completed work
-                  </label>
-
-                  <input
+                <div className="field">
+                  <span className="jobflow-label-text">Proof photo</span>
+                  <PhotoPicker
                     id="resolve-proof"
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) =>
-                      setResolveProof(
-                        event.target.files?.[0] || null
-                      )
-                    }
-                    disabled={actionLoading}
+                    files={resolveProof}
+                    onChange={setResolveProof}
+                    max={1}
+                    label="Photo of the finished work"
                   />
-
-                  {resolveProof && (
-                    <p className="detail-label">
-                      Selected: {resolveProof.name}
-                    </p>
+                  {!resolveProof.length && (
+                    <span className="field-hint">
+                      Take it from the same angle as the citizen's photo.
+                      Cases with proof get signed off faster.
+                    </span>
                   )}
                 </div>
 
-                <button
-                  type="submit"
-                  className="workflow-success-button"
-                  disabled={actionLoading}
-                >
-                  {actionLoading
-                    ? "Resolving..."
-                    : "✓ Resolve Issue"}
-                </button>
+                <div className="button-row">
+                  <button
+                    type="submit"
+                    className="btn-accent"
+                    disabled={actionLoading}
+                  >
+                    {actionLoading ? (
+                      <span className="spinner" aria-hidden="true" />
+                    ) : (
+                      <CircleCheck aria-hidden="true" />
+                    )}
+                    {actionLoading ? "Resolving…" : "Mark resolved"}
+                  </button>
+                </div>
               </form>
             )}
-
-            {!canAccept &&
-              !canStart &&
-              !canResolve &&
-              !isCompleted && (
-                <div className="workflow-info">
-                  <strong>
-                    No action available
-                  </strong>
-
-                  <p>
-                    The issue is currently in a
-                    state where no workflow action
-                    can be performed.
-                  </p>
-                </div>
-              )}
-
-            {isCompleted && (
-              <div className="workflow-complete-message">
-                <span>✓</span>
-
-                <div>
-                  <strong>
-                    Assignment completed
-                  </strong>
-
-                  <p>
-                    This issue has been marked as
-                    resolved and is now awaiting
-                    citizen verification.
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
-        </section>
-      )}
+        )}
 
-      {!assignment && (
-        <section className="details-card">
-          <p className="eyebrow">
-            ASSIGNMENT
+        {assignment && !isMine && !isCompleted && (
+          <p className="jobflow-note">
+            <AlertTriangle aria-hidden="true" />
+            This job belongs to {assignment.authority?.name ?? "another officer"}.
+            Only they can move it along.
           </p>
-
-          <div className="workflow-info">
-            <strong>
-              Not assigned yet
-            </strong>
-
-            <p>
-              This issue has not been assigned to
-              an authority.
-            </p>
-          </div>
-        </section>
-      )}
-
-      {/* =====================================================
-          ISSUE INFORMATION
-      ===================================================== */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          ISSUE INFORMATION
-        </p>
-
-        <h2>Issue Overview</h2>
-
-        <div className="details-grid">
-          <div className="detail-item">
-            <span>Category</span>
-
-            <strong>
-              {formatStatus(issue.category)}
-            </strong>
-          </div>
-
-          <div className="detail-item">
-            <span>Severity</span>
-
-            <strong>
-              {formatStatus(issue.severity)}
-            </strong>
-          </div>
-
-          <div className="detail-item">
-            <span>Reported</span>
-
-            <strong>
-              {formatDate(issue.createdAt)}
-            </strong>
-          </div>
-
-          <div className="detail-item">
-            <span>Complaints</span>
-
-            <strong>
-              {issue._count?.complaints || 0}
-            </strong>
-          </div>
-
-          <div className="detail-item">
-            <span>Upvotes</span>
-
-            <strong>
-              {issue._count?.upvotes || 0}
-            </strong>
-          </div>
-        </div>
-      </section>
-
-      {/* =====================================================
-          DESCRIPTION
-      ===================================================== */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          DESCRIPTION
-        </p>
-
-        <h2>Reported Problem</h2>
-
-        <p className="details-description">
-          {issue.description ||
-            "No description provided."}
-        </p>
-      </section>
-
-      {/* =====================================================
-          LOCATION
-      ===================================================== */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          LOCATION
-        </p>
-
-        <h2>Issue Location</h2>
-
-        <div className="location-box">
-          <h3>
-            📍{" "}
-            {issue.address ||
-              "Address unavailable"}
-          </h3>
-
-          <p>
-            Coordinates: {issue.latitude},{" "}
-            {issue.longitude}
-          </p>
-        </div>
-      </section>
-
-      {/* =====================================================
-          DEPARTMENT
-      ===================================================== */}
-
-      {issue.department && (
-        <section className="details-card">
-          <p className="eyebrow">
-            DEPARTMENT
-          </p>
-
-          <h2>Responsible Department</h2>
-
-          <div className="organization-highlight">
-            <strong>
-              {issue.department.name}
-            </strong>
-
-            <span>
-              Assigned department
-            </span>
-          </div>
-        </section>
-      )}
-
-      {/* =====================================================
-          WARD
-      ===================================================== */}
-
-      {issue.ward && (
-        <section className="details-card">
-          <p className="eyebrow">
-            WARD
-          </p>
-
-          <h2>Service Area</h2>
-
-          <div className="organization-highlight">
-            <strong>
-              {issue.ward.name}
-            </strong>
-
-            {issue.ward.code && (
-              <span>
-                Ward Code: {issue.ward.code}
-              </span>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* =====================================================
-          SLA
-      ===================================================== */}
-
-      {issue.sla && (
-        <section className="details-card">
-          <p className="eyebrow">
-            SERVICE LEVEL
-          </p>
-
-          <h2>SLA Information</h2>
-
-          <div className="details-grid">
-            <div className="detail-item">
-              <span>Resolution Time</span>
-
-              <strong>
-                {issue.sla.durationMin} minutes
-              </strong>
-            </div>
-
-            <div className="detail-item">
-              <span>Deadline</span>
-
-              <strong>
-                {formatDate(
-                  issue.sla.deadline
-                )}
-              </strong>
-            </div>
-
-            <div className="detail-item">
-              <span>SLA Status</span>
-
-              <strong
-                className={
-                  issue.sla.breached
-                    ? "text-danger"
-                    : "text-success"
-                }
-              >
-                {issue.sla.breached
-                  ? "Breached"
-                  : "Within SLA"}
-              </strong>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* =====================================================
-          STATUS TIMELINE
-      ===================================================== */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          PROGRESS
-        </p>
-
-        <h2>Status Timeline</h2>
-
-        {issue.statusHistory?.length > 0 ? (
-          <div className="timeline">
-            {issue.statusHistory.map(
-              (history, index) => {
-                const isLast =
-                  index ===
-                  issue.statusHistory.length - 1;
-
-                return (
-                  <div
-                    className={`timeline-item ${
-                      isLast
-                        ? "timeline-item-last"
-                        : ""
-                    }`}
-                    key={history.id}
-                  >
-                    <div className="timeline-marker">
-                      {isLast ? "●" : "✓"}
-                    </div>
-
-                    <div className="timeline-content">
-                      <div className="timeline-title-row">
-                        <h3>
-                          {formatStatus(
-                            history.status
-                          )}
-                        </h3>
-
-                        {isLast && (
-                          <span className="timeline-current">
-                            Current
-                          </span>
-                        )}
-                      </div>
-
-                      {history.note && (
-                        <p>
-                          {history.note}
-                        </p>
-                      )}
-
-                      {!history.note && (
-                        <p>
-                          Status updated.
-                        </p>
-                      )}
-
-                      {history.imageUrl && (
-                        <img
-                          className="timeline-photo"
-                          src={history.imageUrl}
-                          alt="Photo attached to this update"
-                        />
-                      )}
-
-                      <small>
-                        {formatDate(
-                          history.createdAt
-                        )}
-                      </small>
-                    </div>
-                  </div>
-                );
-              }
-            )}
-          </div>
-        ) : (
-          <div className="empty-inline">
-            <p>
-              No status history available.
-            </p>
-          </div>
         )}
       </section>
 
-      {issue.resolutionImageUrl && (
-        <section className="complaint-image-section">
-          <div className="section-heading">
-            <h2>Resolution proof</h2>
+      <div className="grid-main-side case-layout">
+        <div className="case-main">
+          <section className="card" aria-labelledby="evidence-title">
+            <SectionHeader
+              eyebrow="Reported"
+              title={<span id="evidence-title">What the citizen sent</span>}
+              description={
+                reportCount > 1
+                  ? `${reportCount} reports were merged into this case.`
+                  : undefined
+              }
+            />
+
+            <div className="case-evidence">
+              <PhotoGallery photos={photos} alt={issue.title} />
+
+              <p className="case-description">
+                {issue.description || "No description added."}
+              </p>
+
+              {voiceNotes.map((complaint, index) => (
+                <div key={complaint.id ?? index} className="case-voice">
+                  <span>
+                    <Mic aria-hidden="true" />
+                    Voice note{voiceNotes.length > 1 ? ` ${index + 1}` : ""}
+                  </span>
+                  <audio controls src={complaint.audioUrl} preload="none" />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {canReadCosts && <CostLedger issueId={issue.id} canLog={canLogCosts} />}
+
+          <section className="card case-history" aria-labelledby="timeline-title">
+            <SectionHeader
+              eyebrow={FEATURES.siteUpdates}
+              title={<span id="timeline-title">Case timeline</span>}
+              description="Status changes and site updates, oldest first. Citizens see the same."
+            />
+            <CaseTimeline history={history} />
+
+            {issue.resolutionImageUrl && (
+              <figure className="job-proof">
+                <img
+                  src={issue.resolutionImageUrl}
+                  alt="Proof photo of the completed work"
+                />
+                <figcaption>
+                  <span className="chip chip-success">Proof</span>
+                  Photo attached when the job was resolved
+                </figcaption>
+              </figure>
+            )}
+          </section>
+
+          <div className="case-threads">
+            <IssueChat issueId={issue.id} />
+            <CommentsSection issueId={issue.id} />
           </div>
+        </div>
 
-          <img
-            className="complaint-image"
-            src={issue.resolutionImageUrl}
-            alt="Photo of the completed work"
-          />
-        </section>
-      )}
+        <aside className="case-side">
+          <FixClockPanel clock={clock} />
 
-      <IssueChat issueId={issue.id} />
+          <section className="card case-side-card" aria-labelledby="assign-title">
+            <h2 id="assign-title" className="case-side-title">
+              Assignment
+            </h2>
+            {assignment ? (
+              <dl className="case-facts">
+                <div>
+                  <dt>
+                    <HardHat aria-hidden="true" />
+                    Officer
+                  </dt>
+                  <dd>
+                    {isMine ? "You" : (assignment.authority?.name ?? "—")}
+                    {assignment.assignedAt && (
+                      <small>Assigned {timeAgo(assignment.assignedAt, now)}</small>
+                    )}
+                  </dd>
+                </div>
+                {(assignment.department ?? issue.department) && (
+                  <div>
+                    <dt>
+                      <Building2 aria-hidden="true" />
+                      Department
+                    </dt>
+                    <dd>{(assignment.department ?? issue.department).name}</dd>
+                  </div>
+                )}
+                {(assignment.ward ?? issue.ward) && (
+                  <div>
+                    <dt>
+                      <MapPin aria-hidden="true" />
+                      Ward
+                    </dt>
+                    <dd>
+                      {(assignment.ward ?? issue.ward).name}
+                      {(assignment.ward ?? issue.ward).code
+                        ? ` (${(assignment.ward ?? issue.ward).code})`
+                        : ""}
+                    </dd>
+                  </div>
+                )}
+                {issue.sla?.durationMin != null && (
+                  <div>
+                    <dt>
+                      <CalendarDays aria-hidden="true" />
+                      Fix window
+                    </dt>
+                    <dd>
+                      {issue.sla.durationMin >= 1440
+                        ? `${Math.round(issue.sla.durationMin / 144) / 10} days`
+                        : `${Math.round(issue.sla.durationMin / 6) / 10} hours`}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            ) : (
+              <p className="case-side-note">Not dispatched yet.</p>
+            )}
+          </section>
 
-      <CommentsSection issueId={issue.id} />
+          <section className="card case-side-card" aria-labelledby="place-title">
+            <h2 id="place-title" className="case-side-title">
+              Location
+            </h2>
+            <p className="case-address">
+              <MapPin aria-hidden="true" />
+              {issue.address || "Address unavailable"}
+            </p>
+            {hasCoords && (
+              <p className="case-coords mono">
+                {Number(issue.latitude).toFixed(5)}, {Number(issue.longitude).toFixed(5)}
+              </p>
+            )}
+            <div className="case-links">
+              {hasCoords && (
+                <a
+                  href={`https://www.openstreetmap.org/directions?to=${issue.latitude}%2C${issue.longitude}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-secondary btn-sm"
+                >
+                  <ExternalLink aria-hidden="true" />
+                  Directions
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              )}
+              <Link to={`/issues/${issue.id}`} className="btn btn-ghost btn-sm">
+                <Radar aria-hidden="true" />
+                Public page
+              </Link>
+            </div>
+          </section>
+
+          <section className="card case-side-card" aria-labelledby="facts-title">
+            <h2 id="facts-title" className="case-side-title">
+              Case facts
+            </h2>
+            <dl className="case-facts">
+              <div>
+                <dt>
+                  <Users aria-hidden="true" />
+                  Reports
+                </dt>
+                <dd>{formatNumber(reportCount)}</dd>
+              </div>
+              <div>
+                <dt>
+                  <ThumbsUp aria-hidden="true" />
+                  Backers
+                </dt>
+                <dd>{formatNumber(issue._count?.upvotes ?? 0)}</dd>
+              </div>
+            </dl>
+            {confidence != null && (
+              <Meter
+                label={`${FEATURES.autoSort} confidence`}
+                value={confidence}
+                thresholds={[50, 75]}
+              />
+            )}
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

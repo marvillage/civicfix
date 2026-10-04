@@ -7,74 +7,42 @@
 
 import { AxiosError } from "axios";
 import fixtures from "./fixtures.json";
+import { STORAGE_KEYS } from "../brand";
+import { MOCK_HANDLERS } from "./mocks";
+import { alignPulseMonths, relabelMonths, revive } from "./time";
 
 export const DEMO_TOKEN_PREFIX = "demo-session:";
 
 const ROLES = ["CITIZEN", "AUTHORITY", "ADMIN"];
 const LATENCY_MS = 150;
-const PROFILE_KEY = "civicfix_demo_profile:";
+const PROFILE_KEY = "fixity_demo_profile:";
 
 const { responses, accounts } = fixtures;
 
-// ── Time shifting ───────────────────────────────────────────
-// Timestamps are moved forward by (now - recordedAt) so "2 hours ago"
-// and live SLA countdowns look the same whenever the demo is opened.
-
-const recordedAt = Date.parse(fixtures.recordedAt);
-const shiftMs = Number.isFinite(recordedAt)
-  ? Date.now() - recordedAt
-  : 0;
-const ISO_RE =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
-
-function revive(value) {
-  if (Array.isArray(value)) {
-    return value.map(revive);
-  }
-
-  if (value && typeof value === "object") {
-    const copy = {};
-
-    for (const key of Object.keys(value)) {
-      copy[key] = revive(value[key]);
-    }
-
-    return copy;
-  }
-
-  if (typeof value === "string" && ISO_RE.test(value)) {
-    return new Date(
-      Date.parse(value) + shiftMs
-    ).toISOString();
-  }
-
-  return value;
-}
-
-// Month buckets ("Sept 26") are labels, not timestamps, so they are
-// rebuilt to end at the current month.
-function relabelMonths(data) {
-  const monthly = data?.analytics?.monthly;
-
-  if (!Array.isArray(monthly)) return data;
-
-  const now = new Date();
-
-  monthly.forEach((bucket, index) => {
-    const date = new Date(
-      now.getFullYear(),
-      now.getMonth() - (monthly.length - 1 - index),
-      1
-    );
-
-    bucket.month = date.toLocaleDateString("en-IN", {
-      month: "short",
-      year: "2-digit",
-    });
-  });
-
-  return data;
-}
+// Recorded accounts carry the server's permission list; this mirror
+// of backend/src/auth/permissions.ts only covers older recordings.
+const CITIZEN_PERMS = [
+  "issue:report", "issue:upvote", "issue:comment", "issue:message",
+  "complaint:read:own", "complaint:verify", "watchzone:manage",
+  "poll:vote", "drive:propose", "drive:join",
+];
+const STAFF_PERMS = [
+  "issue:upvote", "issue:comment", "issue:message", "issue:status",
+  "assignment:work", "assignment:dispatch", "field:report", "performance:read:own",
+  "cost:read", "cost:log", "budget:read", "bulletin:publish",
+  "watchzone:manage", "poll:results", "analytics:full", "org:read",
+];
+const ADMIN_PERMS = [
+  ...STAFF_PERMS, "issue:read:all", "issue:assign", "issue:duplicate",
+  "assignment:read:all", "budget:manage", "cost:manage", "bulletin:manage",
+  "poll:manage", "drive:moderate", "export:csv", "audit:read",
+  "sla:manage", "org:manage", "user:manage", "rbac:read",
+];
+const FALLBACK_PERMISSIONS = {
+  CITIZEN: CITIZEN_PERMS,
+  AUTHORITY: STAFF_PERMS,
+  ADMIN: ADMIN_PERMS,
+};
 
 // ── Session ─────────────────────────────────────────────────
 
@@ -88,7 +56,7 @@ function safeStorage(action) {
 
 function currentRole() {
   const token = safeStorage((storage) =>
-    storage.getItem("civicfix_token")
+    storage.getItem(STORAGE_KEYS.token)
   );
 
   if (!token?.startsWith(DEMO_TOKEN_PREFIX)) {
@@ -113,7 +81,11 @@ function accountFor(role) {
     overrides = {};
   }
 
-  return revive({ ...accounts[role], ...overrides });
+  return revive({
+    permissions: FALLBACK_PERMISSIONS[role] ?? [],
+    ...accounts[role],
+    ...overrides,
+  });
 }
 
 function saveProfile(role, fields) {
@@ -224,7 +196,7 @@ function toPattern(path) {
     .join("/");
 }
 
-function findFixture(role, method, path, query) {
+function findFixture(role, method, path, query, { exactOnly = false } = {}) {
   const base = `${method} ${path}`;
   const exact = query ? `${base}?${query}` : base;
   const sources = buckets(role);
@@ -233,6 +205,8 @@ function findFixture(role, method, path, query) {
   for (const bucket of sources) {
     if (bucket[exact]) return bucket[exact];
   }
+
+  if (exactOnly) return null;
 
   // 2. same path, any query
   for (const bucket of sources) {
@@ -287,21 +261,28 @@ function demoId() {
   return `demo-${Date.now().toString(36)}-${counter}`;
 }
 
-function publicIssues() {
-  return (
-    responses.public["GET /issues?sort=newest"]?.data?.issues || []
-  );
-}
+// Every case the recording saw in any list, newest first. City Radar,
+// Echo Check and "near me" all filter this pool locally.
+let pool = null;
 
-function allIssues() {
+function issuePool() {
+  if (pool) return pool;
+
   const byId = new Map();
-  const lists = Object.entries(responses.public)
-    .filter(([key]) => key.startsWith("GET /issues?"))
-    .flatMap(([, value]) => value.data?.issues || []);
 
-  for (const issue of lists) byId.set(issue.id, issue);
+  for (const [key, value] of Object.entries(responses.public)) {
+    if (key !== "GET /issues" && !key.startsWith("GET /issues?")) continue;
 
-  return [...byId.values()];
+    for (const issue of value.data?.issues || []) {
+      byId.set(issue.id, issue);
+    }
+  }
+
+  pool = [...byId.values()].sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt)
+  );
+
+  return pool;
 }
 
 function distanceMeters(lat1, lng1, lat2, lng2) {
@@ -318,7 +299,7 @@ function distanceMeters(lat1, lng1, lat2, lng2) {
 }
 
 function sampleIssue() {
-  const issues = publicIssues();
+  const issues = issuePool();
 
   return (
     issues.find((issue) => issue.status === "REPORTED") ||
@@ -347,17 +328,16 @@ function singular(word) {
 
 // ── GET handlers with real logic ────────────────────────────
 
-function listIssues(params) {
-  const exact = findFixture(
-    null,
-    "GET",
-    "/issues",
-    params.status
-      ? `sort=newest&status=${params.status}`
-      : "sort=newest"
-  );
+// Mirrors GET /issues: closed and duplicate cases are hidden unless a
+// status is asked for; cursor pagination (an offset for "upvotes").
+const HIDDEN_BY_DEFAULT = ["CLOSED", "DUPLICATE"];
 
-  let issues = [...(exact?.data?.issues || publicIssues())];
+function listIssues(params) {
+  let issues = issuePool().filter((i) =>
+    params.status
+      ? i.status === params.status
+      : !HIDDEN_BY_DEFAULT.includes(i.status)
+  );
 
   if (params.category) {
     issues = issues.filter((i) => i.category === params.category);
@@ -378,16 +358,107 @@ function listIssues(params) {
   }
 
   if (params.sort === "oldest") {
-    issues.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    issues = [...issues].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   } else if (params.sort === "upvotes") {
-    issues.sort(
+    issues = [...issues].sort(
       (a, b) => (b._count?.upvotes || 0) - (a._count?.upvotes || 0)
     );
-  } else {
-    issues.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  return { issues };
+  const limit = Math.min(Math.max(Number(params.limit) || 50, 1), 200);
+  let start = 0;
+
+  if (params.cursor) {
+    if (params.sort === "upvotes") {
+      start = Number(params.cursor) || 0;
+    } else {
+      const index = issues.findIndex((i) => i.id === params.cursor);
+      start = index >= 0 ? index + 1 : issues.length;
+    }
+  }
+
+  const page = issues.slice(start, start + limit);
+  const more = start + limit < issues.length;
+
+  return {
+    issues: page,
+    nextCursor: more
+      ? params.sort === "upvotes"
+        ? String(start + limit)
+        : page[page.length - 1]?.id ?? null
+      : null,
+  };
+}
+
+// Case Desk (admins): open cases come from the recorded open list;
+// closed and "all" views page through the local pool, like the API.
+const OPEN_STATUSES = [
+  "REPORTED",
+  "AI_VERIFIED",
+  "ASSIGNED",
+  "ACKNOWLEDGED",
+  "IN_PROGRESS",
+  "SLA_BREACHED",
+  "ESCALATED",
+  "REOPENED",
+];
+
+function adminIssues(params) {
+  const recorded =
+    responses.ADMIN?.["GET /issues/admin/all?limit=500&view=open"]?.data;
+  const open = recorded?.issues ?? [];
+  const view = ["open", "closed", "all"].includes(params.view)
+    ? params.view
+    : "open";
+
+  const byId = new Map(issuePool().map((issue) => [issue.id, issue]));
+  for (const issue of open) byId.set(issue.id, issue);
+
+  let issues = [...byId.values()]
+    .filter((issue) =>
+      view === "open"
+        ? OPEN_STATUSES.includes(issue.status)
+        : view === "closed"
+          ? !OPEN_STATUSES.includes(issue.status)
+          : true
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  if (params.category) {
+    issues = issues.filter((i) => i.category === params.category);
+  }
+
+  if (params.wardId) {
+    issues = issues.filter((i) => i.wardId === params.wardId);
+  }
+
+  if (params.q) {
+    const needle = params.q.toLowerCase();
+
+    issues = issues.filter((i) =>
+      [i.title, i.address, i.ward?.name, i.id]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(needle))
+    );
+  }
+
+  const limit = Math.min(Math.max(Number(params.limit) || 100, 1), 500);
+  const start = params.cursor
+    ? issues.findIndex((i) => i.id === params.cursor) + 1
+    : 0;
+  const page = issues.slice(start, start + limit);
+
+  return {
+    issues: page,
+    nextCursor:
+      start + limit < issues.length ? page[page.length - 1]?.id ?? null : null,
+    total: issues.length,
+    totals: recorded?.totals ?? {
+      open: open.length,
+      closed: 0,
+      all: open.length,
+    },
+  };
 }
 
 function nearbyIssues(params) {
@@ -400,7 +471,8 @@ function nearbyIssues(params) {
     return { issues: [] };
   }
 
-  const issues = publicIssues()
+  const issues = issuePool()
+    .filter((i) => !HIDDEN_BY_DEFAULT.includes(i.status))
     .filter((i) => !params.category || i.category === params.category)
     .map((i) => ({
       ...i,
@@ -416,7 +488,7 @@ function nearbyIssues(params) {
 function geocode(params) {
   const lat = Number(params.lat);
   const lng = Number(params.lng);
-  const nearest = allIssues()
+  const nearest = issuePool()
     .map((i) => ({
       address: i.address,
       d: distanceMeters(lat, lng, i.latitude, i.longitude),
@@ -608,6 +680,29 @@ function handleMutation(role, request, body) {
   return response;
 }
 
+// ── Feature mocks (demo/mocks/*) ────────────────────────────
+
+function runMocks(role, request, body) {
+  const context = {
+    role,
+    method: request.method,
+    path: request.path,
+    params: request.params,
+    segments: request.segments,
+    body,
+    account: role ? accountFor(role) : null,
+    now: new Date(),
+  };
+
+  for (const handler of MOCK_HANDLERS) {
+    const result = handler(context);
+
+    if (result) return result;
+  }
+
+  return null;
+}
+
 // ── The adapter ─────────────────────────────────────────────
 
 function respond(config, status, data) {
@@ -650,6 +745,12 @@ function resolveGet(role, request, config) {
     return [200, revive(listIssues(params))];
   }
 
+  if (path === "/issues/admin/all") {
+    return role === "ADMIN"
+      ? [200, revive(adminIssues(params))]
+      : [403, { message: "You do not have permission to perform this action" }];
+  }
+
   if (path === "/issues/nearby") {
     return [200, revive(nearbyIssues(params))];
   }
@@ -658,7 +759,18 @@ function resolveGet(role, request, config) {
     return [200, geocode(params)];
   }
 
-  const fixture = findFixture(role, "GET", path, query);
+  const exactFixture = findFixture(role, "GET", path, query, {
+    exactOnly: true,
+  });
+
+  if (!exactFixture) {
+    const mocked = runMocks(role, request, {});
+
+    if (mocked) return mocked;
+  }
+
+  const fixture =
+    exactFixture || findFixture(role, "GET", path, query);
 
   if (path.endsWith(".csv")) {
     const text =
@@ -674,6 +786,10 @@ function resolveGet(role, request, config) {
 
   if (fixture && path === "/dashboard/analytics") {
     return [fixture.status, relabelMonths(revive(fixture.data))];
+  }
+
+  if (fixture && path === "/pulse") {
+    return [fixture.status, alignPulseMonths(revive(fixture.data))];
   }
 
   if (fixture) {
@@ -694,7 +810,16 @@ export async function demoAdapter(config) {
     return respond(config, status, data);
   }
 
-  const result = handleMutation(role, request, parseBody(config.data));
+  const body = parseBody(config.data);
+  const isAuthRoute = request.path.startsWith("/auth/");
+  const mocked =
+    !isAuthRoute && role ? runMocks(role, request, body) : null;
+
+  if (mocked) {
+    return respond(config, mocked[0], mocked[1]);
+  }
+
+  const result = handleMutation(role, request, body);
   const { __status: status = 200, ...data } = result;
 
   return respond(config, status, data);

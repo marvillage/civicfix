@@ -1,9 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Lock, MessageCircle, Send } from "lucide-react";
 import api from "../api/axios";
-import { useAuth } from "../context/AuthContext";
+import { FEATURES } from "../brand";
+import { useAuth } from "../context/auth";
+import { ROLE_LABEL } from "./layout/navigation";
+import { formatDateTime, timeAgo } from "../lib/format";
 
+const POLL_MS = 10000;
+
+// Direct Line: private thread between the reporter and the assigned
+// officer (admins can read it too). Hidden when the API says 403.
+// Styles: styles/pages/issue.css.
 export default function IssueChat({ issueId }) {
   const { user } = useAuth();
+  const headingId = useId();
+  const fieldId = useId();
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -14,26 +25,21 @@ export default function IssueChat({ issueId }) {
 
   useEffect(() => {
     if (!issueId) {
-      return;
+      return undefined;
     }
 
     let cancelled = false;
 
     async function fetchMessages() {
       try {
-        const response = await api.get(
-          `/issues/${issueId}/messages`
-        );
+        const response = await api.get(`/issues/${issueId}/messages`);
 
         if (!cancelled) {
           setMessages(response.data.messages || []);
           setAllowed(true);
         }
-      } catch (error) {
-        if (
-          !cancelled &&
-          error.response?.status === 403
-        ) {
+      } catch (fetchError) {
+        if (!cancelled && fetchError.response?.status === 403) {
           setAllowed(false);
         }
       }
@@ -41,7 +47,7 @@ export default function IssueChat({ issueId }) {
 
     fetchMessages();
 
-    const timer = setInterval(fetchMessages, 10000);
+    const timer = setInterval(fetchMessages, POLL_MS);
 
     return () => {
       cancelled = true;
@@ -51,15 +57,16 @@ export default function IssueChat({ issueId }) {
 
   useEffect(() => {
     if (listRef.current) {
-      listRef.current.scrollTop =
-        listRef.current.scrollHeight;
+      listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages.length]);
 
   async function handleSend(event) {
     event.preventDefault();
 
-    if (!text.trim()) {
+    const body = text.trim();
+
+    if (!body) {
       return;
     }
 
@@ -67,34 +74,22 @@ export default function IssueChat({ issueId }) {
     setError("");
 
     try {
-      const response = await api.post(
-        `/issues/${issueId}/messages`,
-        { text: text.trim() }
-      );
+      const response = await api.post(`/issues/${issueId}/messages`, {
+        text: body,
+      });
 
-      setMessages((previous) => [
-        ...previous,
-        response.data.data,
-      ]);
+      if (response.data.data) {
+        setMessages((previous) => [...previous, response.data.data]);
+      }
 
       setText("");
-    } catch (error) {
+    } catch (sendError) {
       setError(
-        error.response?.data?.message ||
-          "Unable to send the message."
+        sendError.response?.data?.message || "Couldn't send the message."
       );
     } finally {
       setSending(false);
     }
-  }
-
-  function formatTime(date) {
-    return new Date(date).toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   }
 
   if (!allowed) {
@@ -102,67 +97,90 @@ export default function IssueChat({ issueId }) {
   }
 
   return (
-    <section className="details-card chat-section">
-      <h2>Private thread</h2>
+    <section className="card direct-line" aria-labelledby={headingId}>
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">{FEATURES.directLine}</p>
+          <h2 id={headingId}>Private thread</h2>
+          <p className="section-lede direct-line-note">
+            <Lock aria-hidden="true" />
+            Only the reporter, the assigned officer and admins can read
+            this. Use it for directions, gate codes or photos of access.
+          </p>
+        </div>
+      </div>
 
-      <p className="verification-intro">
-        Only you and the assigned authority can see
-        these messages — use it for directions,
-        access details, or clarifications.
-      </p>
-
-      <div className="chat-list" ref={listRef}>
+      <div
+        className="dl-list"
+        ref={listRef}
+        role="log"
+        aria-live="polite"
+        aria-label={`${FEATURES.directLine} messages`}
+        tabIndex={0}
+      >
         {messages.length === 0 ? (
-          <p className="comments-empty">
-            No messages yet.
+          <p className="dl-empty">
+            <MessageCircle aria-hidden="true" />
+            No messages yet. Say hello to the crew.
           </p>
         ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`chat-bubble ${
-                message.sender?.id === user?.id
-                  ? "chat-mine"
-                  : ""
-              }`}
-            >
-              <div className="chat-meta">
-                <strong>
-                  {message.sender?.id === user?.id
-                    ? "You"
-                    : message.sender?.name}
-                </strong>
-                <small>
-                  {formatTime(message.createdAt)}
-                </small>
-              </div>
+          messages.map((message) => {
+            const mine = message.sender?.id === user?.id;
+            const role = message.sender?.role;
 
-              <p>{message.text}</p>
-            </div>
-          ))
+            return (
+              <div
+                key={message.id}
+                className={`dl-msg ${mine ? "is-mine" : ""}`}
+              >
+                <div className="dl-meta">
+                  <strong>{mine ? "You" : message.sender?.name || "Crew"}</strong>
+                  {!mine && role && role !== "CITIZEN" && (
+                    <span className="dl-role">{ROLE_LABEL[role] ?? role}</span>
+                  )}
+                  <time
+                    dateTime={message.createdAt}
+                    title={formatDateTime(message.createdAt)}
+                  >
+                    {timeAgo(message.createdAt)}
+                  </time>
+                </div>
+
+                <p>{message.text}</p>
+              </div>
+            );
+          })
         )}
       </div>
 
       {error && (
-        <div className="form-error">{error}</div>
+        <div className="form-error" role="alert">
+          {error}
+        </div>
       )}
 
-      <form className="chat-form" onSubmit={handleSend}>
+      <form className="dl-form" onSubmit={handleSend}>
+        <label htmlFor={fieldId} className="sr-only">
+          Message
+        </label>
+
         <input
+          id={fieldId}
           type="text"
           value={text}
-          onChange={(event) =>
-            setText(event.target.value)
-          }
+          onChange={(event) => setText(event.target.value)}
           placeholder="Write a message…"
           maxLength={2000}
+          autoComplete="off"
         />
 
         <button
           type="submit"
+          className="dl-send"
           disabled={sending || !text.trim()}
+          aria-label="Send message"
         >
-          {sending ? "…" : "Send"}
+          <Send aria-hidden="true" />
         </button>
       </form>
     </section>

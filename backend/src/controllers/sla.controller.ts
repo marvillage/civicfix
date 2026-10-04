@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
+import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { recordAudit } from "../services/audit.service";
 import {
   createSLA,
   checkSLABreaches,
 } from "../services/sla.service";
 
 export async function createSLAController(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
@@ -20,6 +22,19 @@ export async function createSLAController(
     const sla = await createSLA({
       issueId,
       durationMin: Number(durationMin),
+    });
+
+    await recordAudit({
+      actorId: req.user?.userId,
+      action: "sla.set",
+      entityType: "SLA",
+      entityId: sla.id,
+      meta: {
+        issueId: sla.issueId,
+        durationMin: sla.durationMin,
+        deadline: sla.deadline.toISOString(),
+      },
+      ip: req.ip,
     });
 
     return res.status(201).json({

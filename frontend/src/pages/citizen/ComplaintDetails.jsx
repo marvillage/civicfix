@@ -1,35 +1,125 @@
 import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  Link,
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+  BadgeCheck,
+  Building2,
+  CalendarDays,
+  ExternalLink,
+  HardHat,
+  MapPin,
+  Mic,
+  Radar,
+  Recycle,
+  RotateCcw,
+  Siren,
+  Sparkles,
+  Star,
+  Trash2,
+} from "lucide-react";
 import api from "../../api/axios";
+import { FEATURES } from "../../brand";
 import CommentsSection from "../../components/CommentsSection";
 import IssueChat from "../../components/IssueChat";
 import PhotoGallery from "../../components/PhotoGallery";
+import { Meter } from "../../components/charts";
 import {
-  EmergencyBanner,
-  ChronicBadge,
-  ExpectedFix,
-} from "../../components/IssueExtras";
+  CategoryChip,
+  Loading,
+  PageHeader,
+  SectionHeader,
+  SeverityBadge,
+  StatusBadge,
+} from "../../components/ui";
+import { formatDate, formatDateTime, timeAgo } from "../../lib/format";
+import {
+  BackLink,
+  CaseTimeline,
+  FixClockPanel,
+} from "../CaseKit";
+import { currentAssignment, fixClock, useNow } from "../caseUtils";
+
+const STAR_WORDS = ["", "Poor", "Fair", "Good", "Great", "Excellent"];
+
+function StarRating({ value, onChange }) {
+  return (
+    <div className="star-rating" role="radiogroup" aria-label="Rate the fix">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          role="radio"
+          aria-checked={value === star}
+          aria-label={`${star} star${star > 1 ? "s" : ""}, ${STAR_WORDS[star]}`}
+          className={`star-button ${star <= value ? "is-on" : ""}`}
+          onClick={() => onChange(star === value ? 0 : star)}
+        >
+          <Star aria-hidden="true" />
+        </button>
+      ))}
+      <span className="star-word" aria-live="polite">
+        {value ? STAR_WORDS[value] : "Tap to rate"}
+      </span>
+    </div>
+  );
+}
 
 export default function ComplaintDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const now = useNow(60_000);
 
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState("");
 
+  const [approved, setApproved] = useState(null);
+  const [note, setNote] = useState("");
+  const [stars, setStars] = useState(0);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
+  const [verificationSuccess, setVerificationSuccess] = useState("");
+
+  // Bumped after a Sign-Off to refetch the case.
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (!id) return undefined;
+
+    let cancelled = false;
+
+    async function fetchComplaint() {
+      try {
+        const response = await api.get(`/complaints/${id}`);
+
+        if (cancelled) return;
+
+        setError("");
+        setComplaint(response.data.complaint);
+      } catch (fetchError) {
+        console.error("Fetch complaint error:", fetchError);
+
+        if (!cancelled) {
+          setError(
+            fetchError.response?.data?.message || "Unable to load this case."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchComplaint();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, reloadKey]);
+
   async function handleWithdraw() {
-    if (
-      !window.confirm(
-        "Withdraw this report? This cannot be undone."
-      )
-    ) {
+    if (!window.confirm("Withdraw this report? This cannot be undone.")) {
       return;
     }
 
@@ -38,124 +128,54 @@ export default function ComplaintDetails() {
 
     try {
       await api.delete(`/complaints/${id}`);
-
       navigate("/citizen/complaints");
-    } catch (error) {
+    } catch (withdrawFailure) {
       setWithdrawError(
-        error.response?.data?.message ||
-          "Unable to withdraw the complaint."
+        withdrawFailure.response?.data?.message ||
+          "Unable to withdraw the report."
       );
       setWithdrawing(false);
     }
   }
 
-  const [showVerification, setShowVerification] = useState(false);
-  const [approved, setApproved] = useState(null);
-  const [note, setNote] = useState("");
-  const [stars, setStars] = useState(0);
-  const [verifying, setVerifying] = useState(false);
-
-  const [verificationError, setVerificationError] = useState("");
-  const [verificationSuccess, setVerificationSuccess] = useState("");
-
-  async function fetchComplaint() {
-    try {
-      setError("");
-
-      const response = await api.get(`/complaints/${id}`);
-
-      setComplaint(response.data.complaint);
-    } catch (error) {
-      console.error("Fetch complaint error:", error);
-
-      setError(
-        error.response?.data?.message ||
-          "Unable to load complaint."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (id) {
-      fetchComplaint();
-    }
-  }, [id]);
-
-  function formatDate(date) {
-    if (!date) {
-      return "Not available";
-    }
-
-    return new Date(date).toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  function formatStatus(status) {
-    return status
-      ?.replace(/_/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (char) => char.toUpperCase());
-  }
-
-  function getStatusClass(status) {
-    return `status-badge status-${status
-      ?.toLowerCase()
-      .replace(/_/g, "-")}`;
-  }
-
-  function startVerification(value) {
+  function chooseVerdict(value) {
     setApproved(value);
     setNote("");
     setVerificationError("");
     setVerificationSuccess("");
-    setShowVerification(true);
   }
 
   async function handleVerification(event) {
     event.preventDefault();
 
-    if (approved === null) {
-      return;
-    }
+    if (approved === null) return;
 
     setVerifying(true);
     setVerificationError("");
     setVerificationSuccess("");
 
     try {
-      const response = await api.patch(
-        `/complaints/${id}/verify`,
-        {
-          approved,
-          note,
-          stars:
-            approved && stars > 0
-              ? stars
-              : undefined,
-        }
-      );
+      const response = await api.patch(`/complaints/${id}/verify`, {
+        approved,
+        note,
+        stars: approved && stars > 0 ? stars : undefined,
+      });
 
       setVerificationSuccess(
         response.data.message ||
-          "Complaint updated successfully."
+          (approved
+            ? "Signed off. Thanks for closing the loop."
+            : "Case reopened. The crew has been told why.")
       );
+      setApproved(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
 
-      setShowVerification(false);
-
-      await fetchComplaint();
-    } catch (error) {
-      console.error("Verification error:", error);
+      setReloadKey((key) => key + 1);
+    } catch (verifyError) {
+      console.error("Verification error:", verifyError);
 
       setVerificationError(
-        error.response?.data?.message ||
-          "Unable to update the complaint."
+        verifyError.response?.data?.message || "Unable to update the case."
       );
     } finally {
       setVerifying(false);
@@ -163,562 +183,217 @@ export default function ComplaintDetails() {
   }
 
   if (loading) {
-    return (
-      <div className="page">
-        <div className="loading-block">
-          <span className="spinner" />
-          <span>Loading complaint…</span>
-        </div>
-      </div>
-    );
+    return <Loading label="Opening the Case File…" />;
   }
 
   if (error || !complaint) {
     return (
       <div className="page">
-        <div className="page-header">
-          <Link to="/citizen/complaints">
-            ‹ Back to My Complaints
-          </Link>
-
-          <p className="eyebrow">CIVICFIX</p>
-
-          <h1>Complaint</h1>
-        </div>
-
-        <div className="form-error">
-          {error || "Complaint not found."}
-        </div>
+        <BackLink to="/citizen/complaints">{FEATURES.myCases}</BackLink>
+        <PageHeader eyebrow={FEATURES.caseFile} title="Case not found" />
+        <div className="form-error">{error || "This case doesn't exist."}</div>
       </div>
     );
   }
 
-  const issue = complaint.issue;
+  const issue = complaint.issue ?? {};
+  const assignment = currentAssignment(issue);
+  const clock = fixClock(
+    { sla: issue.sla, status: issue.status, createdAt: issue.createdAt },
+    now
+  );
+  const photos = complaint.photos?.length
+    ? complaint.photos
+    : [complaint.imageUrl].filter(Boolean);
+  const resolvedEntry = [...(issue.statusHistory ?? [])]
+    .reverse()
+    .find((entry) => entry.status === "RESOLVED");
+  const canSignOff = issue.status === "RESOLVED";
+  const canWithdraw =
+    ["REPORTED", "AI_VERIFIED"].includes(issue.status) &&
+    !issue.assignments?.some((item) => !item.completedAt);
+  const confidence =
+    issue.aiConfidence != null ? Math.round(issue.aiConfidence * 100) : null;
+  const lat = complaint.latitude ?? issue.latitude;
+  const lng = complaint.longitude ?? issue.longitude;
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <Link to="/citizen/complaints">
-          ‹ Back to My Complaints
-        </Link>
-      </div>
+    <div className="page case-file">
+      <BackLink to="/citizen/complaints">{FEATURES.myCases}</BackLink>
+
+      <PageHeader eyebrow={FEATURES.caseFile} title={issue.title || "Untitled case"}>
+        <div className="case-head-meta">
+          <StatusBadge status={issue.status} />
+          {issue.isEmergency && (
+            <span className="red-alert">
+              <Siren aria-hidden="true" />
+              {FEATURES.redAlert}
+            </span>
+          )}
+          {issue.category && <CategoryChip category={issue.category} />}
+          <SeverityBadge severity={issue.severity} />
+          {(issue.reopenCount || 0) >= 2 && (
+            <span className="chip chip-warning">
+              <Recycle aria-hidden="true" />
+              Reopened {issue.reopenCount}×
+            </span>
+          )}
+          <span className="case-head-when">
+            <CalendarDays aria-hidden="true" />
+            Reported {formatDate(complaint.createdAt)} ·{" "}
+            {timeAgo(complaint.createdAt, now)}
+          </span>
+        </div>
+      </PageHeader>
 
       {verificationSuccess && (
-        <div className="form-success">
+        <div className="form-success" role="status">
           {verificationSuccess}
         </div>
       )}
 
-      {/* =====================================================
-          COMPLAINT HEADER
-      ===================================================== */}
-
-      <EmergencyBanner issue={issue} />
-
-      <section className="details-header">
-        <div className="details-header-content">
-          <p className="eyebrow">
-            CIVIC COMPLAINT
-          </p>
-
-          <h1>
-            {issue?.title || "Civic Issue"}
-          </h1>
-
-          <p>
-            Submitted on{" "}
-            {formatDate(complaint.createdAt)}{" "}
-            <ChronicBadge issue={issue} />
-          </p>
-        </div>
-
-        <span className={getStatusClass(issue?.status)}>
-          {formatStatus(issue?.status)}
-        </span>
-      </section>
-
-      {issue && <ExpectedFix issue={issue} />}
-
-      {/* =====================================================
-          REPORTED MEDIA
-      ===================================================== */}
-
-      {complaint.imageUrl && (
-        <section className="complaint-image-section">
-          <div className="section-heading">
-            <p className="eyebrow">
-              EVIDENCE
-            </p>
-
-            <h2>
-              Reported{" "}
-              {complaint.photos?.length > 1
-                ? "Photos"
-                : "Image"}
-            </h2>
-          </div>
-
-          <PhotoGallery
-            photos={
-              complaint.photos?.length
-                ? complaint.photos
-                : [complaint.imageUrl]
-            }
-            alt="Reported civic issue"
-          />
-
-          {complaint.audioUrl && (
-            <div className="voice-note-row">
-              <span>🎙 Voice note</span>
-              <audio
-                controls
-                src={complaint.audioUrl}
-              />
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* =====================================================
-          CLASSIFICATION
-      ===================================================== */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          CLASSIFICATION
-        </p>
-
-        <h2>Issue Classification</h2>
-
-        <div className="details-grid">
-          <div className="detail-item">
-            <span>Category</span>
-
-            <strong>
-              {formatStatus(
-                issue?.category || "OTHER"
-              )}
-            </strong>
-          </div>
-
-          <div className="detail-item">
-            <span>Severity</span>
-
-            <strong>
-              {formatStatus(
-                issue?.severity || "MEDIUM"
-              )}
-            </strong>
-          </div>
-
-          {issue?.aiConfidence !== null &&
-            issue?.aiConfidence !== undefined && (
-              <div className="detail-item">
-                <span>AI Confidence</span>
-
-                <strong>
-                  {Math.round(
-                    issue.aiConfidence * 100
-                  )}
-                  %
-                </strong>
-              </div>
-            )}
-
-          <div className="detail-item">
-            <span>Current Status</span>
-
-            <strong>
-              {formatStatus(issue?.status)}
-            </strong>
-          </div>
-        </div>
-      </section>
-
-      {/* =====================================================
-          DESCRIPTION
-      ===================================================== */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          DESCRIPTION
-        </p>
-
-        <h2>What Was Reported</h2>
-
-        <p className="details-description">
-          {complaint.description ||
-            issue?.description ||
-            "No description provided."}
-        </p>
-      </section>
-
-      {/* =====================================================
-          LOCATION
-      ===================================================== */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          LOCATION
-        </p>
-
-        <h2>Issue Location</h2>
-
-        <div className="location-box">
-          <h3>
-            📍{" "}
-            {issue?.address ||
-              "Address unavailable"}
-          </h3>
-
-          <p>
-            Coordinates:{" "}
-            {complaint.latitude},{" "}
-            {complaint.longitude}
-          </p>
-        </div>
-      </section>
-
-      {/* =====================================================
-          DEPARTMENT / WARD
-      ===================================================== */}
-
-      {(issue?.department || issue?.ward) && (
-        <section className="details-card">
-          <p className="eyebrow">
-            ASSIGNMENT
-          </p>
-
-          <h2>Responsible Organization</h2>
-
-          <div className="details-grid">
-            {issue.department && (
-              <div className="detail-item">
-                <span>Department</span>
-
-                <strong>
-                  {issue.department.name}
-                </strong>
-              </div>
-            )}
-
-            {issue.ward && (
-              <div className="detail-item">
-                <span>Ward</span>
-
-                <strong>
-                  {issue.ward.name}
-                  {issue.ward.code
-                    ? ` (${issue.ward.code})`
-                    : ""}
-                </strong>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* =====================================================
-          SLA
-      ===================================================== */}
-
-      {issue?.sla && (
-        <section className="details-card">
-          <p className="eyebrow">
-            SERVICE LEVEL
-          </p>
-
-          <h2>Resolution Timeline</h2>
-
-          <div className="details-grid">
-            <div className="detail-item">
-              <span>Deadline</span>
-
-              <strong>
-                {formatDate(
-                  issue.sla.deadline
-                )}
-              </strong>
-            </div>
-
-            <div className="detail-item">
-              <span>SLA Status</span>
-
-              <strong
-                className={
-                  issue.sla.breached
-                    ? "text-danger"
-                    : "text-success"
-                }
-              >
-                {issue.sla.breached
-                  ? "SLA Breached"
-                  : "Within SLA"}
-              </strong>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* =====================================================
-          STATUS TIMELINE
-      ===================================================== */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          PROGRESS
-        </p>
-
-        <h2>Status Timeline</h2>
-
-        {issue?.statusHistory?.length > 0 ? (
-          <div className="timeline">
-            {issue.statusHistory.map(
-              (history, index) => {
-                const isLast =
-                  index ===
-                  issue.statusHistory.length - 1;
-
-                return (
-                  <div
-                    className={`timeline-item ${
-                      isLast
-                        ? "timeline-item-last"
-                        : ""
-                    }`}
-                    key={history.id}
-                  >
-                    <div className="timeline-marker">
-                      {isLast ? "●" : "✓"}
-                    </div>
-
-                    <div className="timeline-content">
-                      <div className="timeline-title-row">
-                        <h3>
-                          {formatStatus(
-                            history.status
-                          )}
-                        </h3>
-
-                        {isLast && (
-                          <span className="timeline-current">
-                            Current
-                          </span>
-                        )}
-                      </div>
-
-                      <p>
-                        {history.note ||
-                          "Status updated."}
-                      </p>
-
-                      {history.imageUrl && (
-                        <img
-                          className="timeline-photo"
-                          src={history.imageUrl}
-                          alt="Photo attached to this update"
-                        />
-                      )}
-
-                      <small>
-                        {formatDate(
-                          history.createdAt
-                        )}
-                      </small>
-                    </div>
-                  </div>
-                );
-              }
-            )}
-          </div>
-        ) : (
-          <div className="empty-inline">
+      {canSignOff && (
+        <section className="card signoff" aria-labelledby="signoff-title">
+          <div className="signoff-intro">
+            <p className="eyebrow">{FEATURES.signOff}</p>
+            <h2 id="signoff-title">Is it really fixed?</h2>
             <p>
-              No status history available.
+              {assignment?.authority?.name ?? "The crew"} marked this case
+              resolved
+              {resolvedEntry ? ` ${timeAgo(resolvedEntry.createdAt, now)}` : ""}
+              . Check the spot, compare the photos, then sign it off or send
+              it back.
             </p>
+            {resolvedEntry?.note && (
+              <blockquote className="signoff-note">
+                “{resolvedEntry.note}”
+              </blockquote>
+            )}
           </div>
-        )}
-      </section>
 
-      {/* =====================================================
-          RESOLUTION VERIFICATION
-      ===================================================== */}
-
-      {issue?.status === "RESOLVED" && (
-        <section className="details-card verification-card">
-          <p className="eyebrow">
-            RESOLUTION
-          </p>
-
-          <h2>
-            Has this issue been resolved?
-          </h2>
-
-          <p className="verification-intro">
-            The authority has marked this issue
-            as resolved. Please confirm whether
-            the civic issue has actually been fixed.
-          </p>
-
-          {issue?.resolutionImageUrl && (
-            <div className="proof-compare">
+          <div
+            className={`signoff-compare ${issue.resolutionImageUrl ? "" : "is-single"}`}
+          >
+            {complaint.imageUrl && (
               <figure>
                 <img
                   src={complaint.imageUrl}
-                  alt="The issue as originally reported"
+                  alt="The problem as you reported it"
                 />
-                <figcaption>Your report</figcaption>
+                <figcaption>
+                  <span className="chip chip-outline">Before</span>
+                  Your report · {formatDate(complaint.createdAt, { year: undefined })}
+                </figcaption>
               </figure>
+            )}
 
+            {issue.resolutionImageUrl ? (
               <figure>
                 <img
                   src={issue.resolutionImageUrl}
-                  alt="The completed work photographed by the authority"
+                  alt="The completed work, photographed by the crew"
                 />
                 <figcaption>
-                  After the work
+                  <span className="chip chip-success">After</span>
+                  Crew's proof
+                  {resolvedEntry
+                    ? ` · ${formatDate(resolvedEntry.createdAt, { year: undefined })}`
+                    : ""}
                 </figcaption>
               </figure>
-            </div>
-          )}
+            ) : (
+              <p className="signoff-noproof">
+                The crew didn't attach a photo of the finished work. Have a
+                look in person before you sign off.
+              </p>
+            )}
+          </div>
 
-          {!showVerification && (
-            <div className="verification-actions">
+          {approved === null ? (
+            <div className="signoff-choices">
               <button
                 type="button"
-                className="verification-success-button"
-                onClick={() =>
-                  startVerification(true)
-                }
+                className="btn-accent btn-lg"
+                onClick={() => chooseVerdict(true)}
               >
-                ✓ Yes, it's resolved
+                <BadgeCheck aria-hidden="true" />
+                Yes, it's fixed
               </button>
-
               <button
                 type="button"
-                className="verification-danger-button"
-                onClick={() =>
-                  startVerification(false)
-                }
+                className="btn-danger-ghost btn-lg"
+                onClick={() => chooseVerdict(false)}
               >
-                ✕ No, reopen it
+                <RotateCcw aria-hidden="true" />
+                No, reopen it
               </button>
             </div>
-          )}
-
-          {showVerification && (
+          ) : (
             <form
               onSubmit={handleVerification}
-              className="verification-form"
+              className={`signoff-form ${approved ? "is-approve" : "is-reopen"}`}
             >
+              <h3>{approved ? "Sign off the fix" : "Reopen the case"}</h3>
+
               {approved && (
-                <div className="form-group">
-                  <label>
-                    How satisfied are you with the fix?
-                  </label>
-
-                  <div
-                    className="star-input"
-                    role="radiogroup"
-                    aria-label="Satisfaction rating"
-                  >
-                    {[1, 2, 3, 4, 5].map((value) => (
-                      <button
-                        key={value}
-                        type="button"
-                        className={
-                          value <= stars
-                            ? "star-button star-on"
-                            : "star-button"
-                        }
-                        onClick={() =>
-                          setStars(value)
-                        }
-                        aria-label={`${value} star${value > 1 ? "s" : ""}`}
-                      >
-                        ★
-                      </button>
-                    ))}
-
-                    {stars > 0 && (
-                      <span className="star-label">
-                        {stars}/5
-                      </span>
-                    )}
-                  </div>
+                <div className="field">
+                  <span className="signoff-label">How good was the work?</span>
+                  <StarRating value={stars} onChange={setStars} />
                 </div>
               )}
 
-              <div className="verification-form-header">
-                <h3>
-                  {approved
-                    ? "Confirm resolution"
-                    : "Reopen complaint"}
-                </h3>
-
-                <p>
-                  {approved
-                    ? "Confirm that the civic issue has been properly resolved."
-                    : "Tell the authority why the issue is still unresolved."}
-                </p>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="verificationNote">
-                  {approved
-                    ? "Additional Note"
-                    : "Reason for Reopening"}
+              <div className="field">
+                <label htmlFor="verification-note">
+                  {approved ? "Anything to add?" : "What's still wrong?"}
                 </label>
-
                 <textarea
-                  id="verificationNote"
+                  id="verification-note"
                   value={note}
-                  onChange={(event) =>
-                    setNote(event.target.value)
-                  }
+                  onChange={(event) => setNote(event.target.value)}
                   placeholder={
                     approved
-                      ? "Optional note"
-                      : "Please explain what is still wrong..."
+                      ? "Optional. A thank-you or a tip for the crew."
+                      : "e.g. The patch cracked again after one night of rain."
                   }
-                  rows={4}
+                  rows={3}
                   required={!approved}
                 />
+                {!approved && (
+                  <span className="field-hint">
+                    The crew sees this, and the {FEATURES.fixClock} starts again.
+                  </span>
+                )}
               </div>
 
               {verificationError && (
-                <div className="form-error">
+                <div className="form-error" role="alert">
                   {verificationError}
                 </div>
               )}
 
-              <div className="verification-actions">
+              <div className="button-row">
+                <button
+                  type="submit"
+                  className={approved ? "btn-accent" : "btn-danger"}
+                  disabled={verifying}
+                >
+                  {verifying && <span className="spinner" aria-hidden="true" />}
+                  {verifying
+                    ? "Saving…"
+                    : approved
+                      ? "Sign off the fix"
+                      : "Reopen case"}
+                </button>
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="btn-ghost"
                   onClick={() => {
-                    setShowVerification(false);
+                    setApproved(null);
                     setVerificationError("");
                   }}
                   disabled={verifying}
                 >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className={
-                    approved
-                      ? "verification-success-button"
-                      : "verification-danger-button"
-                  }
-                  disabled={verifying}
-                >
-                  {verifying
-                    ? "Updating..."
-                    : approved
-                    ? "Confirm Resolution"
-                    : "Reopen Complaint"}
+                  Back
                 </button>
               </div>
             </form>
@@ -726,46 +401,173 @@ export default function ComplaintDetails() {
         </section>
       )}
 
-      {issue &&
-        ["REPORTED", "AI_VERIFIED"].includes(
-          issue.status
-        ) &&
-        !issue.assignments?.some(
-          (assignment) => !assignment.completedAt
-        ) && (
-          <section className="details-card">
-            <h2>Withdraw this report</h2>
+      <div className="grid-main-side case-layout">
+        <div className="case-main">
+          <section className="card" aria-labelledby="evidence-title">
+            <SectionHeader
+              eyebrow="Your report"
+              title={<span id="evidence-title">What you sent</span>}
+            />
 
-            <p className="verification-intro">
-              Filed by mistake, or already fixed? You
-              can withdraw this report while no
-              authority has started working on it.
-            </p>
+            <div className="case-evidence">
+              <PhotoGallery photos={photos} alt="Reported problem" />
 
-            {withdrawError && (
-              <div className="form-error">
-                {withdrawError}
-              </div>
-            )}
+              <p className="case-description">
+                {complaint.description ||
+                  issue.description ||
+                  "No description added."}
+              </p>
 
-            <button
-              type="button"
-              className="verification-danger-button"
-              onClick={handleWithdraw}
-              disabled={withdrawing}
-            >
-              {withdrawing
-                ? "Withdrawing…"
-                : "Withdraw report"}
-            </button>
+              {complaint.audioUrl && (
+                <div className="case-voice">
+                  <span>
+                    <Mic aria-hidden="true" />
+                    Voice note
+                  </span>
+                  <audio controls src={complaint.audioUrl} preload="none" />
+                </div>
+              )}
+            </div>
           </section>
-        )}
 
-      {issue && <IssueChat issueId={issue.id} />}
+          <section className="card case-history" aria-labelledby="timeline-title">
+            <SectionHeader
+              eyebrow="Progress"
+              title={<span id="timeline-title">Case timeline</span>}
+              description="Every status change and site update, oldest first."
+            />
+            <CaseTimeline history={issue.statusHistory} />
+          </section>
 
-      {issue && (
-        <CommentsSection issueId={issue.id} />
-      )}
+          {issue.id && (
+            <div className="case-threads">
+              <IssueChat issueId={issue.id} />
+              <CommentsSection issueId={issue.id} />
+            </div>
+          )}
+        </div>
+
+        <aside className="case-side">
+          <FixClockPanel clock={clock} />
+
+          <section className="card case-side-card" aria-labelledby="crew-title">
+            <h2 id="crew-title" className="case-side-title">
+              Who's on it
+            </h2>
+            <dl className="case-facts">
+              <div>
+                <dt>
+                  <HardHat aria-hidden="true" />
+                  Officer
+                </dt>
+                <dd>
+                  {assignment?.authority?.name ?? "Not assigned yet"}
+                  {assignment?.assignedAt && (
+                    <small>Assigned {timeAgo(assignment.assignedAt, now)}</small>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  <Building2 aria-hidden="true" />
+                  Department
+                </dt>
+                <dd>{issue.department?.name ?? "Being routed"}</dd>
+              </div>
+              <div>
+                <dt>
+                  <MapPin aria-hidden="true" />
+                  Ward
+                </dt>
+                <dd>
+                  {issue.ward
+                    ? `${issue.ward.name}${issue.ward.code ? ` (${issue.ward.code})` : ""}`
+                    : "Not set"}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="card case-side-card" aria-labelledby="place-title">
+            <h2 id="place-title" className="case-side-title">
+              Location
+            </h2>
+            <p className="case-address">
+              <MapPin aria-hidden="true" />
+              {issue.address || "Address unavailable"}
+            </p>
+            {lat != null && lng != null && (
+              <p className="case-coords mono">
+                {Number(lat).toFixed(5)}, {Number(lng).toFixed(5)}
+              </p>
+            )}
+            <div className="case-links">
+              {issue.id && (
+                <Link to={`/issues/${issue.id}`} className="btn btn-secondary btn-sm">
+                  <Radar aria-hidden="true" />
+                  Public page
+                </Link>
+              )}
+              {lat != null && lng != null && (
+                <a
+                  href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-ghost btn-sm"
+                >
+                  <ExternalLink aria-hidden="true" />
+                  Open map
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              )}
+            </div>
+          </section>
+
+          <section className="card case-side-card" aria-labelledby="sort-title">
+            <h2 id="sort-title" className="case-side-title">
+              <Sparkles aria-hidden="true" />
+              {FEATURES.autoSort}
+            </h2>
+            <p className="case-side-note">
+              Read from your photo{issue.category ? "" : " — still working on it"}.
+            </p>
+            {confidence != null && (
+              <Meter
+                label="How sure it is"
+                value={confidence}
+                thresholds={[50, 75]}
+              />
+            )}
+          </section>
+
+          {canWithdraw && (
+            <section className="card case-side-card case-withdraw">
+              <h2 className="case-side-title">Filed by mistake?</h2>
+              <p className="case-side-note">
+                You can withdraw this report until a crew starts on it.
+              </p>
+              {withdrawError && (
+                <div className="form-error" role="alert">
+                  {withdrawError}
+                </div>
+              )}
+              <button
+                type="button"
+                className="btn-danger-ghost btn-sm"
+                onClick={handleWithdraw}
+                disabled={withdrawing}
+              >
+                <Trash2 aria-hidden="true" />
+                {withdrawing ? "Withdrawing…" : "Withdraw report"}
+              </button>
+            </section>
+          )}
+
+          <p className="case-updated">
+            Last update {formatDateTime(issue.updatedAt || complaint.createdAt)}
+          </p>
+        </aside>
+      </div>
     </div>
   );
 }

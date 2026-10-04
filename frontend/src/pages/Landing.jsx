@@ -1,88 +1,157 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  Activity,
+  ArrowRight,
+  BadgeCheck,
+  Camera,
+  Check,
+  Copy,
+  ClipboardList,
+  Gauge,
+  HandHeart,
+  HardHat,
+  LayoutDashboard,
+  LocateFixed,
+  Megaphone,
+  MessagesSquare,
+  Radar,
+  ReceiptIndianRupee,
+  Route,
+  ScrollText,
+  Siren,
+  Sparkles,
+  ThumbsUp,
+  Timer,
+  Vote,
+  Waypoints,
+  Workflow,
+} from "lucide-react";
 import api from "../api/axios";
-
-const FEATURES = [
-  {
-    icon: "📸",
-    title: "Snap it, send it",
-    text: "Photograph the problem, add a voice note if you're in a hurry, and your GPS pins the exact spot. Thirty seconds, done.",
-  },
-  {
-    icon: "🤖",
-    title: "AI sorts it out",
-    text: "The photo is classified automatically — pothole, streetlight, garbage — and routed to the right municipal department.",
-  },
-  {
-    icon: "🗺️",
-    title: "Everything on the map",
-    text: "Every open issue in the city, live on a map with hotspot view. See what's broken around you and upvote what matters.",
-  },
-  {
-    icon: "⏱️",
-    title: "Deadlines that bite",
-    text: "Every issue gets an SLA clock. Miss it and the issue auto-escalates up the chain — no report quietly dies in a drawer.",
-  },
-  {
-    icon: "✅",
-    title: "You verify the fix",
-    text: "Authorities upload proof-of-work photos, and nothing closes until the citizen who reported it confirms it's actually fixed.",
-  },
-  {
-    icon: "🏆",
-    title: "Civic points & badges",
-    text: "Earn points for every report and verified fix. Climb the ward leaderboard and unlock achievement badges.",
-  },
-];
+import { BRAND, FEATURES } from "../brand";
+import { useAuth } from "../context/auth";
+import { PublicHeader, SiteFooter } from "../components/layout/PublicShell";
+import { BarList, ChartFrame } from "../components/charts";
+import { CATEGORY_META } from "../lib/labels";
+import { formatHours, formatNumber } from "../lib/format";
 
 const STEPS = [
   {
-    step: "1",
-    title: "Report",
-    text: "Photo + location. With or without an account.",
+    icon: Camera,
+    name: FEATURES.snapSend,
+    text: `Photo, pin and an optional voice note. No account? ${FEATURES.quickDrop} takes thirty seconds.`,
   },
   {
-    step: "2",
-    title: "Assigned",
-    text: "Routed to the right department and officer, on a deadline.",
+    icon: Sparkles,
+    name: FEATURES.autoSort,
+    text: `Reads the photo, sets category and severity, and routes it to the right department. ${FEATURES.echoCheck} folds in repeat reports.`,
   },
   {
-    step: "3",
-    title: "Fixed",
-    text: "Track progress updates and proof photos live.",
+    icon: Timer,
+    name: FEATURES.fixClock,
+    text: "Every case gets a deadline set by severity. Miss it and the case escalates up the chain on its own.",
   },
   {
-    step: "4",
-    title: "Verified",
-    text: "You confirm the fix — or reopen it with one tap.",
+    icon: BadgeCheck,
+    name: FEATURES.signOff,
+    text: "The crew posts proof photos. The case closes only when you sign it off, or you reopen it in one tap.",
   },
 ];
 
-function CountUp({ value, suffix = "" }) {
+const NEW_FEATURES = [
+  {
+    icon: Activity,
+    name: FEATURES.pulse,
+    text: "Live graphs of what's reported, fixed and late, with Ward Scorecards grading every ward from A to F.",
+    to: "/pulse",
+    cta: "See the numbers",
+  },
+  {
+    icon: Megaphone,
+    name: FEATURES.bulletins,
+    text: "Water cuts, roadworks and advisories, posted by the people running them and pinned to your ward.",
+    to: "/bulletins",
+    cta: "Read bulletins",
+  },
+  {
+    icon: LocateFixed,
+    name: FEATURES.watchZones,
+    text: "Draw a circle around home, school or the office. Get a ping the moment a new case lands inside it.",
+    to: "/watch-zones",
+    guestTo: "/register",
+    cta: "Set a zone",
+  },
+  {
+    icon: Vote,
+    name: FEATURES.wardVote,
+    text: "Help decide which repair your ward tackles first. Results open up once you've cast your vote.",
+    to: "/polls",
+    cta: "Vote now",
+  },
+  {
+    icon: HandHeart,
+    name: FEATURES.drives,
+    text: "Propose a Saturday cleanup, gather neighbours, and log who turned up. Everyone who shows earns Civic Cred.",
+    to: "/drives",
+    cta: "Find a drive",
+  },
+  {
+    icon: ReceiptIndianRupee,
+    name: FEATURES.costLedger,
+    text: "Every rupee spent on a fix (materials, labour, contractors) logged against the case and totalled in public.",
+    to: "/pulse",
+    cta: "Follow the money",
+  },
+];
+
+const CREW_TOOLS = [
+  { icon: ClipboardList, name: FEATURES.crewQueue },
+  { icon: Waypoints, name: FEATURES.routeMap },
+  { icon: Workflow, name: FEATURES.jobFlow },
+  { icon: Camera, name: FEATURES.siteUpdates },
+  { icon: HardHat, name: FEATURES.patrolLog },
+  { icon: Gauge, name: FEATURES.scorecard },
+  { icon: LayoutDashboard, name: FEATURES.commandDeck },
+  { icon: Route, name: FEATURES.dispatch },
+  { icon: ScrollText, name: FEATURES.paperTrail },
+];
+
+function gradeTone(grade = "") {
+  if (["A", "B"].includes(grade)) return "good";
+  if (grade === "C") return "warn";
+  return "bad";
+}
+
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+// Counts up to `value` once, eased; jumps straight there when the
+// visitor prefers reduced motion.
+function CountUp({ value }) {
   const [display, setDisplay] = useState(0);
-  const frame = useRef(null);
+  const frame = useRef(0);
 
   useEffect(() => {
-    if (
-      window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
-      ).matches
-    ) {
-      setDisplay(value);
-      return;
+    const target = Number(value) || 0;
+
+    if (prefersReducedMotion()) {
+      frame.current = requestAnimationFrame(() => setDisplay(target));
+      return () => cancelAnimationFrame(frame.current);
     }
 
     const start = performance.now();
 
     function step(now) {
-      const t = Math.min(1, (now - start) / 1500);
+      const t = Math.min(1, (now - start) / 1400);
       const eased = 1 - Math.pow(1 - t, 3);
 
-      setDisplay(Math.round(value * eased));
+      setDisplay(Math.round(target * eased));
 
-      if (t < 1) {
-        frame.current = requestAnimationFrame(step);
-      }
+      if (t < 1) frame.current = requestAnimationFrame(step);
     }
 
     frame.current = requestAnimationFrame(step);
@@ -91,430 +160,575 @@ function CountUp({ value, suffix = "" }) {
   }, [value]);
 
   return (
-    <strong>
-      {display.toLocaleString("en-IN")}
-      {suffix}
-    </strong>
+    <>
+      <span aria-hidden="true">{formatNumber(display)}</span>
+      <span className="sr-only">{formatNumber(value)}</span>
+    </>
+  );
+}
+
+function LpHead({ id, eyebrow, title, lede, center = false }) {
+  return (
+    <div className={`lp-head ${center ? "is-center" : ""}`}>
+      {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+      <h2 id={id}>{title}</h2>
+      {lede && <p className="lp-lede">{lede}</p>}
+    </div>
   );
 }
 
 export default function Landing() {
+  const { isAuthenticated, homePath, can } = useAuth();
   const [stats, setStats] = useState(null);
+  const [scrolled, setScrolled] = useState(
+    () => typeof window !== "undefined" && window.scrollY > 24
+  );
 
   useEffect(() => {
     api
       .get("/dashboard/public-stats")
-      .then((response) =>
-        setStats(response.data.stats)
-      )
+      .then((response) => setStats(response.data.stats ?? null))
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    const elements = document.querySelectorAll(
-      ".landing-page .reveal"
-    );
+    function onScroll() {
+      setScrolled(window.scrollY > 24);
+    }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("revealed");
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.12 }
-    );
+    window.addEventListener("scroll", onScroll, { passive: true });
 
-    elements.forEach((element) =>
-      observer.observe(element)
-    );
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
-    return () => observer.disconnect();
-  }, [stats]);
+  const reportPath = can("issue:report") ? "/citizen/report" : "/report";
+
+  const categoryRows = (stats?.byCategory ?? [])
+    .map((row) => {
+      const meta = CATEGORY_META[row.category] ?? CATEGORY_META.OTHER;
+      const Icon = meta.icon;
+
+      return {
+        key: row.category,
+        label: meta.label,
+        value: row.count,
+        color: meta.series,
+        icon: <Icon aria-hidden="true" />,
+      };
+    })
+    .sort((a, b) => b.value - a.value);
+
+  const wards = [...(stats?.wards ?? [])]
+    .sort((a, b) => (b.totalIssues ?? 0) - (a.totalIssues ?? 0))
+    .slice(0, 4);
 
   return (
-    <div className="landing-page">
-      <section className="landing-cinema">
-        <div className="landing-cinema-bg" />
+    <div className={`landing ${scrolled ? "is-scrolled" : ""}`}>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
 
-        <header className="landing-nav landing-nav-cinema">
-          <div className="landing-nav-inner">
-            <div className="landing-brand">
-              <img
-                className="brand-icon"
-                src="/images/logo-icon.png"
-                alt=""
-              />
-              CivicFix
+      <PublicHeader variant="overlay" />
+
+      <main id="main" tabIndex={-1}>
+        {/* ── Hero ─────────────────────────────────── */}
+        <section className="lp-hero" aria-labelledby="lp-title">
+          <div className="lp-wrap lp-hero-grid">
+            <div className="lp-hero-copy">
+              <p className="lp-kicker">
+                <span className="lp-kicker-dot" aria-hidden="true" />
+                Public works, tracked in public
+              </p>
+
+              <h1 id="lp-title">
+                Fixes that <span className="lp-mark">stay fixed.</span>
+              </h1>
+
+              <p className="lp-hero-lede">{BRAND.pitch}</p>
+
+              <div className="lp-hero-actions">
+                <Link to={reportPath} className="btn btn-accent btn-lg">
+                  <Camera aria-hidden="true" />
+                  Report an issue
+                </Link>
+
+                {isAuthenticated ? (
+                  <Link to={homePath} className="btn btn-lg lp-btn-line">
+                    Go to your workspace
+                    <ArrowRight aria-hidden="true" />
+                  </Link>
+                ) : (
+                  <Link to="/issues" className="btn btn-lg lp-btn-line">
+                    <Radar aria-hidden="true" />
+                    Open {FEATURES.radar}
+                  </Link>
+                )}
+              </div>
+
+              <ul className="lp-hero-proof">
+                <li>
+                  <Check aria-hidden="true" />
+                  No account needed
+                </li>
+                <li>
+                  <Check aria-hidden="true" />
+                  A deadline on every case
+                </li>
+                <li>
+                  <Check aria-hidden="true" />
+                  Closed only on your {FEATURES.signOff}
+                </li>
+              </ul>
             </div>
 
-            <nav className="landing-links">
-              <Link to="/issues">Browse issues</Link>
-              <Link to="/stats">Transparency</Link>
-              <Link to="/report">
-                Report anonymously
-              </Link>
-            </nav>
-
-            <div className="landing-nav-actions">
-              <Link to="/login">
-                <button
-                  type="button"
-                  className="secondary-button cinema-ghost"
-                >
-                  Log in
-                </button>
-              </Link>
-
-              <Link to="/register">
-                <button type="button">Sign up</button>
-              </Link>
-            </div>
-          </div>
-        </header>
-
-        <div className="landing-cinema-content">
-          <div className="cinema-copy-card">
-          <p className="eyebrow">
-            CIVIC ISSUE REPORTING FOR YOUR CITY
-          </p>
-
-          <h1>
-            The pothole outside your house?
-            It's the city's problem now.
-          </h1>
-
-          <p className="cinema-sub">
-            CivicFix turns a photo into a tracked,
-            deadlined work order for your municipal
-            authority — and doesn't let it close
-            until you confirm the fix.
-          </p>
-
-          <div className="landing-actions">
-            <Link to="/register">
-              <button type="button">
-                Report your first issue
-              </button>
-            </Link>
-
-            <Link to="/issues">
-              <button
-                type="button"
-                className="secondary-button cinema-ghost"
-              >
-                See what's broken nearby
-              </button>
-            </Link>
-          </div>
-
-          <p className="landing-anon cinema-anon">
-            No account?{" "}
-            <Link to="/report" className="text-link">
-              Report anonymously
-            </Link>{" "}
-            in under a minute.
-          </p>
-          </div>
-        </div>
-
-        {stats && stats.total > 0 && (
-          <div className="landing-glass-stats">
-            <div>
-              <CountUp value={stats.total} />
-              <span>issues reported</span>
-            </div>
-
-            <div>
-              <CountUp value={stats.resolved} />
-              <span>fixed &amp; verified</span>
-            </div>
-
-            <div>
-              <CountUp value={stats.open} />
-              <span>currently in progress</span>
-            </div>
-
-            {stats.avgResolutionHours != null && (
-              <div>
-                <CountUp
-                  value={stats.avgResolutionHours}
-                  suffix="h"
+            <div className="lp-hero-art">
+              <div className="lp-hero-frame">
+                <img
+                  src="/images/hero-street.png"
+                  alt="A resident photographs a pothole on a busy street while a municipal officer takes notes nearby"
+                  fetchPriority="high"
                 />
-                <span>average time to fix</span>
+                <span className="lp-hero-tape" aria-hidden="true" />
               </div>
-            )}
-          </div>
-        )}
-      </section>
 
-      <section className="landing-section reveal">
-        <div className="landing-section-inner">
-          <p className="eyebrow">WHY CIVICFIX</p>
+              <div className="lp-float lp-float-case" aria-hidden="true">
+                <div className="lp-float-row">
+                  <span className="category-chip">
+                    <span className="cat-dot cat-ROAD_DAMAGE" />
+                    Roads
+                  </span>
+                  <span className="status-badge status-in-progress">
+                    In progress
+                  </span>
+                </div>
+                <strong>Pothole outside Gandhi Market</strong>
+                <div className="lp-float-clock">
+                  <span>
+                    <Timer />
+                    {FEATURES.fixClock}
+                  </span>
+                  <span>18 h left</span>
+                </div>
+                <div className="meter">
+                  <span style={{ width: "62%" }} />
+                </div>
+                <div className="lp-float-foot">
+                  <ThumbsUp />
+                  24 backers
+                </div>
+              </div>
 
-          <h2>
-            Complaints disappear. Work orders don't.
-          </h2>
-
-          <div className="landing-features">
-            {FEATURES.map((feature) => (
-              <div
-                key={feature.title}
-                className="landing-feature"
-              >
-                <span className="landing-feature-icon">
-                  {feature.icon}
+              <div className="lp-float lp-float-signed" aria-hidden="true">
+                <span className="lp-float-check">
+                  <BadgeCheck />
                 </span>
-
-                <h3>{feature.title}</h3>
-
-                <p>{feature.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="landing-section landing-split landing-split-reverse reveal">
-        <div className="landing-section-inner landing-split-inner">
-          <div>
-            <p className="eyebrow">THE APP</p>
-
-            <h2>Thirty seconds from photo to filed</h2>
-
-            <p>
-              Point, shoot, submit. GPS pins the spot,
-              the address fills itself in, and a voice
-              note replaces typing when you're standing
-              on a busy road. In a real hurry? Skip the
-              account entirely.
-            </p>
-
-            <Link to="/report" className="text-link">
-              Try it without signing up →
-            </Link>
-          </div>
-
-          <img
-            src="/images/app-shot.png"
-            alt="A hand holding a phone with a submitted civic report"
-            onError={(event) => {
-              event.currentTarget.style.display =
-                "none";
-            }}
-          />
-        </div>
-      </section>
-
-      <section className="landing-section landing-split reveal">
-        <div className="landing-section-inner landing-split-inner">
-          <img
-            src="/images/ward-map.png"
-            alt="Illustrated city ward with issue markers"
-            onError={(event) => {
-              event.currentTarget.style.display =
-                "none";
-            }}
-          />
-
-          <div>
-            <p className="eyebrow">TRANSPARENCY</p>
-
-            <h2>
-              Every ward gets a public report card
-            </h2>
-
-            <p>
-              Resolution rates, SLA compliance, and
-              average fix times — visible to everyone,
-              no login needed. Accountability works
-              best in daylight.
-            </p>
-
-            <Link to="/stats" className="text-link">
-              See your city's numbers →
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="landing-section reveal">
-        <div className="landing-section-inner">
-          <p className="eyebrow">HOW IT WORKS</p>
-
-          <h2>From photo to fixed, in four steps</h2>
-
-          <div className="landing-steps">
-            {STEPS.map((item) => (
-              <div
-                key={item.step}
-                className="landing-step"
-              >
-                <span className="landing-step-number">
-                  {item.step}
+                <span>
+                  <strong>Signed off</strong>
+                  <small>Fixed in 2.5 days</small>
                 </span>
-
-                <h3>{item.title}</h3>
-
-                <p>{item.text}</p>
               </div>
-            ))}
+            </div>
           </div>
-        </div>
-      </section>
 
-      <section className="landing-section landing-split landing-split-reverse reveal">
-        <div className="landing-section-inner landing-split-inner">
-          <div>
-            <p className="eyebrow">PROOF OF WORK</p>
+          <div className="lp-wrap">
+            <dl className={`lp-stats ${stats ? "" : "is-loading"}`} aria-live="polite">
+              <div>
+                <dt>Cases reported</dt>
+                <dd>{stats ? <CountUp value={stats.total} /> : "—"}</dd>
+              </div>
+              <div>
+                <dt>Fixed and signed off</dt>
+                <dd>{stats ? <CountUp value={stats.resolved} /> : "—"}</dd>
+              </div>
+              <div>
+                <dt>Open right now</dt>
+                <dd>{stats ? <CountUp value={stats.open} /> : "—"}</dd>
+              </div>
+              <div>
+                <dt>Average time to fix</dt>
+                <dd>{stats ? formatHours(stats.avgResolutionHours) : "—"}</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
 
-            <h2>Before and after, or it didn't happen</h2>
+        <div className="lp-stripe" aria-hidden="true" />
 
-            <p>
-              Authorities attach a photo of the
-              completed work, shown next to your
-              original report. If the fix doesn't
-              hold, reopen it — issues reopened
-              repeatedly get flagged as chronic and
-              pushed up the chain.
-            </p>
+        {/* ── How it works ─────────────────────────── */}
+        <section className="lp-section" aria-labelledby="lp-how">
+          <div className="lp-wrap">
+            <div className="lp-head is-center">
+              <p className="eyebrow">How it works</p>
+              <h2 id="lp-how">From pothole to signed off, in four moves</h2>
+              <p className="lp-lede">
+                A complaint can sit in a drawer. A {BRAND.name} case can't: it
+                has an owner, a deadline and an audience from the first photo.
+              </p>
+            </div>
 
-            <Link
-              to="/register"
-              className="text-link"
+            <ol className="lp-road">
+              {STEPS.map(({ icon: Icon, name, text }, index) => (
+                <li key={name} className="lp-road-step">
+                  <span className="lp-sign" aria-hidden="true">
+                    <span>{index + 1}</span>
+                  </span>
+                  <div className="lp-road-card">
+                    <span className="lp-road-icon" aria-hidden="true">
+                      <Icon />
+                    </span>
+                    <h3>{name}</h3>
+                    <p>{text}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        {/* ── Feature bento ────────────────────────── */}
+        <section className="lp-section lp-section-alt" aria-labelledby="lp-tools">
+          <div className="lp-wrap">
+            <div className="lp-head">
+              <p className="eyebrow">Built for the street</p>
+              <h2 id="lp-tools">Everything a fix needs, nothing a fix doesn't</h2>
+            </div>
+
+            <div className="lp-bento">
+              <Link to="/issues" className="lp-tile lp-tile-radar">
+                <img
+                  src="/images/ward-map.png"
+                  alt="Illustrated ward with pins for a pothole, a dead streetlight, garbage, a leak and a blocked drain"
+                  loading="lazy"
+                />
+                <div className="lp-tile-body">
+                  <span className="lp-tile-tag">
+                    <Radar aria-hidden="true" />
+                    {FEATURES.radar}
+                  </span>
+                  <h3>See every open case on one live map</h3>
+                  <p>
+                    Switch between list, map and hotspots, filter by category,
+                    or tap Near me for what's broken on your street.
+                  </p>
+                  <span className="lp-tile-link">
+                    Open {FEATURES.radar}
+                    <ArrowRight aria-hidden="true" />
+                  </span>
+                </div>
+              </Link>
+
+              <Link to="/report" className="lp-tile lp-tile-snap">
+                <img
+                  src="/images/report-dusk.png"
+                  alt="Hands framing a broken streetlight in a phone camera at dusk, with a location pin on screen"
+                  loading="lazy"
+                />
+                <div className="lp-tile-body">
+                  <span className="lp-tile-tag">
+                    <Camera aria-hidden="true" />
+                    {FEATURES.snapSend} · {FEATURES.quickDrop}
+                  </span>
+                  <h3>Thirty seconds from photo to filed</h3>
+                  <p>
+                    GPS pins the spot, the address fills itself in, and a voice
+                    note beats typing on a busy road.
+                  </p>
+                  <span className="lp-tile-link">
+                    Try {FEATURES.quickDrop}
+                    <ArrowRight aria-hidden="true" />
+                  </span>
+                </div>
+              </Link>
+
+              <div className="lp-tile lp-tile-mini">
+                <span className="lp-mini-icon" aria-hidden="true">
+                  <Copy />
+                </span>
+                <h3>{FEATURES.echoCheck}</h3>
+                <p>
+                  Same pothole, five reports? They merge into one case with
+                  five voices, so crews fix it once.
+                </p>
+              </div>
+
+              <div className="lp-tile lp-tile-mini">
+                <span className="lp-mini-icon" aria-hidden="true">
+                  <ThumbsUp />
+                </span>
+                <h3>{FEATURES.backIt}</h3>
+                <p>
+                  One report is a complaint; fifty backers is a mandate. Back a
+                  case to push it up the queue and follow every update.
+                </p>
+              </div>
+
+              <div className="lp-tile lp-tile-mini lp-tile-alert">
+                <span className="lp-mini-icon" aria-hidden="true">
+                  <Siren />
+                </span>
+                <h3>{FEATURES.redAlert}</h3>
+                <p>
+                  Open manhole or live wire? Flag it. It skips the queue, alerts
+                  every admin and runs on a short clock.
+                </p>
+              </div>
+
+              <div className="lp-tile lp-tile-proof">
+                <img
+                  src="/images/resolved-road.png"
+                  alt="The same road before repair, cracked and flooded, and after, freshly surfaced with a crew member giving a thumbs up"
+                  loading="lazy"
+                />
+                <div className="lp-tile-body">
+                  <span className="lp-tile-tag">
+                    <BadgeCheck aria-hidden="true" />
+                    {FEATURES.signOff}
+                  </span>
+                  <h3>Before and after, or it didn't happen</h3>
+                  <p>
+                    Crews attach proof-of-work photos next to your original
+                    report. If the fix doesn't hold, reopen it; cases that keep
+                    failing are flagged as {FEATURES.repeatOffenders}.
+                  </p>
+                </div>
+              </div>
+
+              <div className="lp-tile lp-tile-talk">
+                <span className="lp-mini-icon" aria-hidden="true">
+                  <MessagesSquare />
+                </span>
+                <h3>
+                  {FEATURES.streetTalk} &amp; {FEATURES.directLine}
+                </h3>
+                <p>
+                  Talk it out in public under the case, or message the assigned
+                  officer privately about gate codes and directions.
+                </p>
+                <div className="lp-chat" aria-hidden="true">
+                  <span className="lp-bubble">
+                    Is the lane closed during work?
+                  </span>
+                  <span className="lp-bubble is-crew">
+                    Only the left lane, 10 am to 4 pm.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── New in Fixity ────────────────────────── */}
+        <section className="lp-new" aria-labelledby="lp-new">
+          <div className="lp-wrap">
+            <div className="lp-head lp-head-dark">
+              <p className="lp-new-chip">New in {BRAND.name}</p>
+              <h2 id="lp-new">More than a complaint box</h2>
+              <p className="lp-lede">
+                Six new ways to see your city clearly, plan around it and pitch
+                in.
+              </p>
+            </div>
+
+            <ul className="lp-new-grid">
+              {NEW_FEATURES.map(({ icon: Icon, name, text, to, guestTo, cta }) => (
+                <li key={name}>
+                  <Link
+                    to={!isAuthenticated && guestTo ? guestTo : to}
+                    className="lp-new-card"
+                  >
+                    <span className="lp-new-icon" aria-hidden="true">
+                      <Icon />
+                    </span>
+                    <h3>{name}</h3>
+                    <p>{text}</p>
+                    <span className="lp-new-link">
+                      {cta}
+                      <ArrowRight aria-hidden="true" />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* ── Live scorecards ──────────────────────── */}
+        <section className="lp-section" aria-labelledby="lp-pulse">
+          <div className="lp-wrap">
+            <div className="lp-pulse-top">
+              <LpHead
+                id="lp-pulse"
+                eyebrow={`${FEATURES.pulse} · live`}
+                title="Every ward gets a grade"
+                lede={`Resolution rates and ${FEATURES.fixClock} records, published for everyone. No login, no RTI request, no spin.`}
+              />
+
+              <Link to="/pulse" className="btn btn-lg">
+                <Activity aria-hidden="true" />
+                Open {FEATURES.pulse}
+              </Link>
+            </div>
+
+            <div
+              className={`lp-pulse-grid ${categoryRows.length ? "" : "is-single"}`}
             >
-              Join your neighbours on CivicFix →
-            </Link>
+              {categoryRows.length > 0 && (
+                <ChartFrame
+                  title="What gets reported"
+                  subtitle="All cases, by category"
+                  className="lp-pulse-chart"
+                  table={{
+                    columns: [
+                      { key: "label", label: "Category" },
+                      { key: "value", label: "Cases", numeric: true },
+                    ],
+                    rows: categoryRows,
+                  }}
+                >
+                  <BarList data={categoryRows} />
+                </ChartFrame>
+              )}
+
+            <div className="lp-grades">
+              {wards.length === 0 ? (
+                <div className="lp-grades-empty">
+                  <Activity aria-hidden="true" />
+                  <p>
+                    Ward Scorecards appear here as soon as the first cases are
+                    filed.
+                  </p>
+                </div>
+              ) : (
+                wards.map((ward) => (
+                  <Link
+                    key={ward.id ?? ward.name}
+                    to="/pulse"
+                    className="lp-grade-card"
+                  >
+                    <span
+                      className={`lp-grade lp-grade-${gradeTone(ward.grade)}`}
+                      aria-label={`Grade ${ward.grade ?? "not rated"}`}
+                    >
+                      {ward.grade ?? "–"}
+                    </span>
+
+                    <span className="lp-grade-body">
+                      <strong>{ward.name}</strong>
+                      <span className="lp-grade-sub">
+                        {ward.code ? `${ward.code} · ` : ""}
+                        {formatNumber(ward.totalIssues ?? 0)} cases
+                      </span>
+
+                      <span className="lp-grade-meter">
+                        <span>Resolved</span>
+                        <span className="meter">
+                          <span style={{ width: `${ward.resolutionRate ?? 0}%` }} />
+                        </span>
+                        <b>{Math.round(ward.resolutionRate ?? 0)}%</b>
+                      </span>
+
+                      <span className="lp-grade-meter">
+                        <span>On time</span>
+                        <span className="meter">
+                          <span style={{ width: `${ward.slaCompliance ?? 0}%` }} />
+                        </span>
+                        <b>{Math.round(ward.slaCompliance ?? 0)}%</b>
+                      </span>
+                    </span>
+                  </Link>
+                ))
+              )}
+            </div>
+            </div>
           </div>
+        </section>
 
-          <img
-            src="/images/resolved-road.png"
-            alt="A broken road before and after repair"
-            onError={(event) => {
-              event.currentTarget.style.display =
-                "none";
-            }}
-          />
-        </div>
-      </section>
+        {/* ── For crews ────────────────────────────── */}
+        <section className="lp-section lp-section-alt" aria-labelledby="lp-crews">
+          <div className="lp-wrap lp-split">
+            <div className="lp-split-art">
+              <img
+                src="/images/control-room.png"
+                alt="An officer in a hi-vis vest studies a wall-sized city map with live case pins in a municipal control room"
+                loading="lazy"
+              />
+            </div>
 
-      <section className="landing-section landing-split reveal">
-        <div className="landing-section-inner landing-split-inner">
-          <img
-            src="/images/community.png"
-            alt="Neighbours celebrating a repaired street"
-            onError={(event) => {
-              event.currentTarget.style.display =
-                "none";
-            }}
-          />
+            <div className="lp-split-copy">
+              <LpHead
+                id="lp-crews"
+                eyebrow="For officers and admins"
+                title="A control room for the people who do the work"
+                lede="Officers get an urgency-sorted queue with live deadlines and a map of the day's jobs. Admins get dispatch, deadlines, routing rules and a full audit trail. Everyone is accountable, including the platform."
+              />
 
-          <div>
-            <p className="eyebrow">COMMUNITY</p>
+              <ul className="lp-tools">
+                {CREW_TOOLS.map(({ icon: Icon, name }) => (
+                  <li key={name}>
+                    <Icon aria-hidden="true" />
+                    {name}
+                  </li>
+                ))}
+              </ul>
 
-            <h2>
-              Fixing a city is a team sport
-            </h2>
-
-            <p>
-              Upvote what matters and get notified as
-              it moves. Earn civic points and badges
-              for every report and verified fix, and
-              climb your ward's leaderboard. One
-              pothole report is a complaint — fifty
-              upvotes is a mandate.
-            </p>
-
-            <Link to="/register" className="text-link">
-              Start earning civic points →
-            </Link>
+              <div className="lp-split-actions">
+                <Link to="/register/authority" className="btn btn-secondary">
+                  <HardHat aria-hidden="true" />
+                  Officer sign-up
+                </Link>
+                <Link to="/login" className="btn btn-ghost">
+                  Staff log in
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="landing-section landing-split-reverse landing-split reveal">
-        <div className="landing-section-inner landing-split-inner">
-          <div>
-            <p className="eyebrow">FOR THE FIXERS</p>
+        {/* ── Final call ───────────────────────────── */}
+        <section className="lp-section lp-final-wrap" aria-labelledby="lp-final">
+          <div className="lp-wrap">
+            <div className="lp-final">
+              <div className="lp-final-art">
+                <img
+                  src="/images/community.png"
+                  alt="Neighbours of all ages smiling on a newly repaired, well-lit street, one holding up a phone"
+                  loading="lazy"
+                />
+              </div>
 
-            <h2>
-              A control room for the people who do
-              the work
-            </h2>
+              <div className="lp-final-copy">
+                <span className="lp-final-stripe" aria-hidden="true" />
+                <h2 id="lp-final">Your street won't fix itself.</h2>
+                <p>
+                  Report, back, vote and show up. Every verified fix earns{" "}
+                  {FEATURES.civicCred}, and every case stays public until it's
+                  done.
+                </p>
 
-            <p>
-              Authorities get an urgency-sorted work
-              queue with live SLA countdowns, field
-              survey mode, and progress updates.
-              Admins get analytics, ward report
-              cards, chronic-issue detection, and a
-              full audit trail. Everyone is
-              accountable — including the platform.
-            </p>
-
-            <Link to="/login" className="text-link">
-              Authority or admin? Log in →
-            </Link>
+                <div className="lp-final-actions">
+                  {isAuthenticated ? (
+                    <Link to={homePath} className="btn btn-lg lp-btn-navy">
+                      Go to your workspace
+                      <ArrowRight aria-hidden="true" />
+                    </Link>
+                  ) : (
+                    <Link to="/register" className="btn btn-lg lp-btn-navy">
+                      Create a free account
+                      <ArrowRight aria-hidden="true" />
+                    </Link>
+                  )}
+                  <Link to="/report" className="btn btn-lg lp-btn-navy-line">
+                    Report without one
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
+        </section>
+      </main>
 
-          <img
-            src="/images/control-room.png"
-            alt="A municipal control room with a live issue map"
-            onError={(event) => {
-              event.currentTarget.style.display =
-                "none";
-            }}
-          />
-        </div>
-      </section>
-
-      <section className="landing-cta reveal">
-        <div className="landing-cta-inner">
-          <h2>
-            Your street won't fix itself.
-          </h2>
-
-          <p>
-            Join CivicFix and turn frustration into a
-            tracked, deadlined, verifiable fix.
-          </p>
-
-          <div className="landing-actions">
-            <Link to="/register">
-              <button type="button">
-                Create a free account
-              </button>
-            </Link>
-
-            <Link to="/report">
-              <button
-                type="button"
-                className="secondary-button"
-              >
-                Report without one
-              </button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <footer className="landing-footer">
-        <div className="landing-footer-inner">
-          <span>
-            CivicFix — civic issues, tracked to the
-            finish.
-          </span>
-
-          <nav>
-            <Link to="/issues">Public issues</Link>
-            <Link to="/stats">Transparency</Link>
-            <Link to="/login">Log in</Link>
-            <Link to="/register">Sign up</Link>
-          </nav>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

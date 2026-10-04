@@ -6,7 +6,7 @@ import {
 export function startSLABreachJob() {
   const CHECK_INTERVAL = 60 * 1000; // 1 minute
 
-  setInterval(async () => {
+  const timer = setInterval(async () => {
     try {
       const breachedResults = await checkSLABreaches();
 
@@ -29,4 +29,6 @@ export function startSLABreachJob() {
   }, CHECK_INTERVAL);
 
   console.log("SLA breach and escalation job started");
+
+  return timer;
 }

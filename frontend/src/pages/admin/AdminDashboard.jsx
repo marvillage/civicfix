@@ -1,40 +1,110 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  Building2,
+  CircleCheck,
+  Clock,
+  Download,
+  Inbox,
+  Recycle,
+  Route,
+  ScrollText,
+  Timer,
+  Users,
+  Wrench,
+} from "lucide-react";
 import api from "../../api/axios";
+import { BRAND, FEATURES } from "../../brand";
+import { useAuth } from "../../context/auth";
+import {
+  BarList,
+  ChartFrame,
+  ColumnChart,
+  Meter,
+} from "../../components/charts";
+import {
+  CategoryChip,
+  EmptyState,
+  Loading,
+  PageHeader,
+  SectionHeader,
+  StatTile,
+} from "../../components/ui";
+import {
+  CATEGORY_META,
+  SEVERITY_LABEL,
+  STATUS_LABEL,
+} from "../../lib/labels";
+import { formatHours, formatNumber } from "../../lib/format";
 
-function BarList({ rows }) {
-  const max = Math.max(
-    ...rows.map((row) => row.count),
-    1
-  );
+const TOOLS = [
+  {
+    to: "/admin/issues",
+    label: FEATURES.caseDesk,
+    text: "Assign, re-status and merge duplicate cases.",
+    icon: Inbox,
+    permission: "issue:read:all",
+  },
+  {
+    to: "/admin/assignments",
+    label: FEATURES.dispatch,
+    text: "Every officer's workload and job progress.",
+    icon: Route,
+    permission: "assignment:read:all",
+  },
+  {
+    to: "/admin/sla",
+    label: FEATURES.fixClock,
+    text: "Deadlines, breaches and auto-escalation.",
+    icon: Timer,
+    permission: "sla:manage",
+  },
+  {
+    to: "/admin/organization",
+    label: FEATURES.orgRouting,
+    text: "Departments, wards and auto-routing rules.",
+    icon: Building2,
+    permission: "org:manage",
+  },
+  {
+    to: "/admin/users",
+    label: FEATURES.accessControl,
+    text: "Roles, staff approvals and officer accounts.",
+    icon: Users,
+    permission: "user:manage",
+  },
+  {
+    to: "/admin/audit",
+    label: FEATURES.paperTrail,
+    text: "Every status change and privileged action.",
+    icon: ScrollText,
+    permission: "audit:read",
+  },
+];
 
-  return (
-    <div className="bar-list">
-      {rows.map((row) => (
-        <div className="bar-row" key={row.label}>
-          <span className="bar-label">
-            {row.label}
-          </span>
+// Severity is ordered, so it uses one hue stepped light → dark
+// (ordinal ramp) rather than categorical colors.
+const SEVERITY_RAMP = {
+  LOW: "color-mix(in oklab, var(--seq-high) 35%, var(--seq-low))",
+  MEDIUM: "color-mix(in oklab, var(--seq-high) 55%, var(--seq-low))",
+  HIGH: "color-mix(in oklab, var(--seq-high) 78%, var(--seq-low))",
+  CRITICAL: "var(--seq-high)",
+};
 
-          <div className="bar-track">
-            <div
-              className="bar-fill"
-              style={{
-                width: `${(row.count / max) * 100}%`,
-              }}
-            />
-          </div>
-
-          <strong className="bar-value">
-            {row.count}
-          </strong>
-        </div>
-      ))}
-    </div>
+function sumStatus(byStatus, keys) {
+  return keys.reduce(
+    (total, key) =>
+      total +
+      (byStatus.find((row) => row.status === key)?.count ?? 0),
+    0
   );
 }
 
 export default function AdminDashboard() {
+  const { user, can } = useAuth();
   const [stats, setStats] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [chronic, setChronic] = useState([]);
@@ -55,14 +125,11 @@ export default function AdminDashboard() {
         setStats(statsRes.data.stats);
         setAnalytics(analyticsRes.data.analytics);
         setChronic(chronicRes.data.issues || []);
-      } catch (error) {
-        console.error(
-          "Fetch dashboard error:",
-          error
-        );
+      } catch (fetchError) {
+        console.error("Fetch dashboard error:", fetchError);
 
         setError(
-          error.response?.data?.message ||
+          fetchError.response?.data?.message ||
             "Unable to load dashboard statistics."
         );
       } finally {
@@ -73,21 +140,6 @@ export default function AdminDashboard() {
     fetchData();
   }, []);
 
-  function formatLabel(value) {
-    if (!value) {
-      return "";
-    }
-
-    return value
-      .replace(/([A-Z])/g, " $1")
-      .replace(/^./, (char) =>
-        char.toUpperCase()
-      )
-      .replace(/_/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
   async function handleExport() {
     setExporting(true);
 
@@ -97,358 +149,342 @@ export default function AdminDashboard() {
         { responseType: "blob" }
       );
 
-      const url = URL.createObjectURL(
-        response.data
-      );
-
+      const url = URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `civicfix-issues-${new Date()
+      link.download = `${BRAND.name.toLowerCase()}-cases-${new Date()
         .toISOString()
         .slice(0, 10)}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Export error:", error);
-      setError("Unable to export issues.");
+    } catch (exportError) {
+      console.error("Export error:", exportError);
+      setError("Unable to export cases.");
     } finally {
       setExporting(false);
     }
   }
 
   if (loading) {
-    return (
-      <div className="page">
-        <div className="loading-block">
-          <span className="spinner" />
-          <span>Loading dashboard…</span>
-        </div>
-      </div>
-    );
+    return <Loading label="Loading the Command Deck…" />;
   }
 
   if (error && !stats) {
     return (
       <div className="page">
-        <h1>Admin Dashboard</h1>
-
-        <div className="form-error">
-          {error}
-        </div>
+        <PageHeader eyebrow={FEATURES.commandDeck} title="City operations" />
+        <div className="form-error">{error}</div>
       </div>
     );
   }
 
-  const status = stats?.status || {};
+  const byStatus = analytics?.byStatus ?? [];
+  const status = stats?.status ?? {};
+  const monthly = analytics?.monthly ?? [];
+  const sla = analytics?.sla;
 
-  const monthly = analytics?.monthly || [];
-  const monthlyMax = Math.max(
-    ...monthly.map((m) => m.count),
-    1
+  const openCount = sumStatus(byStatus, [
+    "REPORTED",
+    "AI_VERIFIED",
+    "ASSIGNED",
+    "ACKNOWLEDGED",
+    "IN_PROGRESS",
+    "REOPENED",
+  ]);
+  const breached = (status.slaBreached || 0) + (status.escalated || 0);
+  const done = (status.resolved || 0) + (status.closed || 0);
+
+  const categoryRows = (analytics?.byCategory ?? [])
+    .map((row) => {
+      const meta = CATEGORY_META[row.category] ?? CATEGORY_META.OTHER;
+      const Icon = meta.icon;
+
+      return {
+        key: row.category,
+        label: meta.label,
+        value: row.count,
+        color: meta.series,
+        icon: <Icon aria-hidden="true" />,
+      };
+    })
+    .sort((a, b) => b.value - a.value);
+
+  const wardRows = (analytics?.byWard ?? [])
+    .map((row) => ({ label: row.ward, value: row.count }))
+    .sort((a, b) => b.value - a.value);
+
+  const severityRows = ["LOW", "MEDIUM", "HIGH", "CRITICAL"].map(
+    (key) => ({
+      key,
+      label: SEVERITY_LABEL[key],
+      value:
+        stats?.severity?.find((item) => item.severity === key)?._count
+          ?.id ?? 0,
+      color: SEVERITY_RAMP[key],
+    })
   );
 
+  const statusRows = [...byStatus]
+    .sort((a, b) => b.count - a.count)
+    .map((row) => ({
+      key: row.status,
+      label: STATUS_LABEL[row.status] ?? row.status,
+      value: row.count,
+    }));
+
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
   return (
-    <div className="page">
-      {/* Header */}
-
-      <div className="page-header admin-dash-header">
-        <div>
-          <p className="eyebrow">
-            ADMINISTRATION
-          </p>
-
-          <h1>Admin Dashboard</h1>
-
-          <p>
-            Monitor CivicFix issues and overall
-            platform activity.
-          </p>
-        </div>
-
-        <div className="issue-card-actions">
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={exporting}
-          >
-            {exporting
-              ? "Exporting…"
-              : "⬇ Export issues (CSV)"}
-          </button>
-
-          <Link to="/profile">
-            <button
-              type="button"
-              className="secondary-button"
-            >
-              My Profile
-            </button>
-          </Link>
-
-          <Link to="/">
-            <button
-              type="button"
-              className="secondary-button"
-            >
-              ⌂ Home
-            </button>
-          </Link>
-        </div>
-      </div>
-
-      {error && (
-        <div className="form-error">{error}</div>
-      )}
-
-      {/* Statistics */}
-
-      <section className="stats-grid">
-        <div className="stat-card">
-          <h2>
-            {stats?.totalIssues || 0}
-          </h2>
-          <p>Total Issues</p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
-            {status.inProgress || 0}
-          </h2>
-          <p>In Progress</p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
-            {(status.resolved || 0) +
-              (status.closed || 0)}
-          </h2>
-          <p>Resolved + Closed</p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
-            {(status.slaBreached || 0) +
-              (status.escalated || 0)}
-          </h2>
-          <p>Breached / Escalated</p>
-        </div>
-      </section>
-
-      {/* Insights */}
-
-      <section className="stats-grid insights-grid">
-        <div className="stat-card">
-          <h2>
-            {analytics?.sla?.complianceRate ??
-              "—"}
-            {analytics?.sla?.complianceRate !=
-              null && "%"}
-          </h2>
-          <p>
-            SLA compliance
-            {analytics?.sla?.total
-              ? ` (${analytics.sla.total - analytics.sla.breached}/${analytics.sla.total} on time)`
-              : " (no SLAs yet)"}
-          </p>
-        </div>
-
-        <div className="stat-card">
-          <h2>
-            {analytics?.avgResolutionHours ??
-              "—"}
-            {analytics?.avgResolutionHours !=
-              null && "h"}
-          </h2>
-          <p>Average resolution time</p>
-        </div>
-      </section>
-
-      {/* Monthly trend */}
-
-      {monthly.length > 0 && (
-        <section className="details-card">
-          <p className="eyebrow">TREND</p>
-
-          <h2>Issues reported per month</h2>
-
-          <div
-            className="column-chart"
-            role="img"
-            aria-label="Issues reported per month over the last six months"
-          >
-            {monthly.map((m) => (
-              <div
-                className="column"
-                key={m.month}
-                title={`${m.month}: ${m.count} issues`}
+    <div className="page command-deck">
+      <PageHeader
+        eyebrow={FEATURES.commandDeck}
+        title={`${greeting}, ${user?.name?.split(" ")[0] ?? "admin"}`}
+        description="The live state of every case in the city: what's open, what's late, and where the fixes keep failing."
+        actions={
+          <>
+            {can("export:csv") && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleExport}
+                disabled={exporting}
               >
-                <strong>{m.count}</strong>
-
-                <div className="column-track">
-                  <div
-                    className="column-bar"
-                    style={{
-                      height: `${(m.count / monthlyMax) * 100}%`,
-                    }}
-                  />
-                </div>
-
-                <span>{m.month}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Category chart */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          ISSUE CATEGORIES
-        </p>
-
-        <h2>Issues by Category</h2>
-
-        {analytics?.byCategory?.length > 0 ? (
-          <BarList
-            rows={analytics.byCategory.map(
-              (row) => ({
-                label: formatLabel(row.category),
-                count: row.count,
-              })
+                <Download aria-hidden="true" />
+                {exporting ? "Exporting…" : FEATURES.dataExport}
+              </button>
             )}
-          />
-        ) : (
-          <p>No category data available.</p>
-        )}
+
+            <Link to="/pulse" className="btn btn-accent">
+              <Activity aria-hidden="true" />
+              Open {FEATURES.pulse}
+            </Link>
+          </>
+        }
+      />
+
+      {error && <div className="form-error">{error}</div>}
+
+      <section className="kpi-row" aria-label="Key numbers">
+        <StatTile
+          label="Total cases"
+          value={formatNumber(stats?.totalIssues ?? 0)}
+          hint={`${formatNumber(openCount)} still open`}
+          icon={Inbox}
+          tone="navy"
+        />
+        <StatTile
+          label="In progress"
+          value={formatNumber(status.inProgress ?? 0)}
+          hint="crews on site"
+          icon={Wrench}
+          tone="warning"
+        />
+        <StatTile
+          label="Resolved & closed"
+          value={formatNumber(done)}
+          hint="fixes delivered"
+          icon={CircleCheck}
+          tone="success"
+        />
+        <StatTile
+          label="Breached or escalated"
+          value={formatNumber(breached)}
+          hint="past their Fix Clock"
+          icon={AlertTriangle}
+          tone="danger"
+          to={can("sla:manage") ? "/admin/sla" : undefined}
+        />
       </section>
 
-      {/* Ward chart */}
-
-      <section className="details-card">
-        <p className="eyebrow">WARDS</p>
-
-        <h2>Issues by Ward</h2>
-
-        {analytics?.byWard?.length > 0 ? (
-          <BarList
-            rows={analytics.byWard.map((row) => ({
-              label: row.ward,
-              count: row.count,
-            }))}
+      <section className="grid-2">
+        <div className="card deck-health">
+          <SectionHeader
+            eyebrow={FEATURES.fixClock}
+            title="Are we keeping our promises?"
           />
-        ) : (
-          <p>No ward data available.</p>
-        )}
-      </section>
 
-      {/* Severity Statistics */}
-
-      <section className="details-card">
-        <p className="eyebrow">
-          ISSUE SEVERITY
-        </p>
-
-        <h2>Issues by Severity</h2>
-
-        {stats?.severity?.length > 0 ? (
-          <BarList
-            rows={stats.severity.map((item) => ({
-              label: formatLabel(item.severity),
-              count: item._count?.id || 0,
-            }))}
+          <Meter
+            label={
+              sla?.total
+                ? `${sla.total - sla.breached} of ${sla.total} deadlines met`
+                : "No deadlines set yet"
+            }
+            value={sla?.complianceRate ?? null}
           />
-        ) : (
-          <p>No severity data available.</p>
-        )}
-      </section>
 
-      {/* Chronic issues */}
+          <div className="deck-health-figures">
+            <div>
+              <span className="detail-label">Average time to fix</span>
+              <strong>
+                <Clock aria-hidden="true" />
+                {formatHours(analytics?.avgResolutionHours)}
+              </strong>
+            </div>
 
-      {chronic.length > 0 && (
-        <section className="details-card chronic-card">
-          <p className="eyebrow">NEEDS A RETHINK</p>
-
-          <h2>Chronic issues</h2>
-
-          <p className="verification-intro">
-            These issues keep coming back — the fixes
-            are not holding. They may need a
-            different contractor, budget, or approach.
-          </p>
-
-          <div className="stats-list">
-            {chronic.map((issue) => (
-              <Link
-                key={issue.id}
-                to={`/issues/${issue.id}`}
-                className="stats-list-item chronic-row"
-              >
-                <span>
-                  <strong>{issue.title}</strong>
-                  {issue.ward
-                    ? ` · ${issue.ward.name}`
-                    : ""}
-                </span>
-
-                <span className="chronic-badge">
-                  ♻ reopened {issue.reopenCount}× ·{" "}
-                  {issue._count?.escalations || 0}{" "}
-                  escalations
-                </span>
-              </Link>
-            ))}
+            <div>
+              <span className="detail-label">Repeat offenders</span>
+              <strong>
+                <Recycle aria-hidden="true" />
+                {chronic.length}
+              </strong>
+            </div>
           </div>
-        </section>
-      )}
+        </div>
 
-      {/* Admin Tools */}
+        <ChartFrame
+          title="Reports per month"
+          subtitle="Last six months, all wards"
+          table={{
+            columns: [
+              { key: "month", label: "Month" },
+              { key: "count", label: "Reports", numeric: true },
+            ],
+            rows: monthly,
+          }}
+        >
+          <ColumnChart
+            data={monthly.map((m, i) => ({
+              label: m.month,
+              value: m.count,
+              seriesLabel: "Reports",
+              title: m.month,
+              color:
+                i === monthly.length - 1
+                  ? "var(--series-2)"
+                  : "var(--series-1)",
+            }))}
+            height={200}
+            ariaLabel="Reports per month, last six months"
+          />
+        </ChartFrame>
+      </section>
 
-      <section className="details-card">
-        <p className="eyebrow">
-          MANAGEMENT
-        </p>
+      <section className="grid-2">
+        <ChartFrame
+          title="Cases by category"
+          subtitle="All time, duplicates included"
+          table={{
+            columns: [
+              { key: "label", label: "Category" },
+              { key: "value", label: "Cases", numeric: true },
+            ],
+            rows: categoryRows,
+          }}
+        >
+          <BarList data={categoryRows} />
+        </ChartFrame>
 
-        <h2>Admin Tools</h2>
+        <ChartFrame
+          title="Cases by ward"
+          subtitle="Where reports come from"
+          table={{
+            columns: [
+              { key: "label", label: "Ward" },
+              { key: "value", label: "Cases", numeric: true },
+            ],
+            rows: wardRows,
+          }}
+        >
+          <BarList data={wardRows} />
+        </ChartFrame>
+      </section>
 
-        <div className="admin-actions">
-          <Link to="/admin/issues">
-            <button type="button">
-              Manage Issues
-            </button>
-          </Link>
+      <section className="grid-2">
+        <ChartFrame
+          title="Severity"
+          subtitle="How bad reported problems are"
+          table={{
+            columns: [
+              { key: "label", label: "Severity" },
+              { key: "value", label: "Cases", numeric: true },
+            ],
+            rows: severityRows,
+          }}
+        >
+          <BarList data={severityRows} />
+        </ChartFrame>
 
-          <Link to="/admin/assignments">
-            <button type="button">
-              Manage Assignments
-            </button>
-          </Link>
+        <ChartFrame
+          title="Pipeline"
+          subtitle="Cases in each status right now"
+          table={{
+            columns: [
+              { key: "label", label: "Status" },
+              { key: "value", label: "Cases", numeric: true },
+            ],
+            rows: statusRows,
+          }}
+        >
+          <BarList data={statusRows} color="var(--series-1)" />
+        </ChartFrame>
+      </section>
 
-          <Link to="/admin/organization">
-            <button type="button">
-              Departments & Wards
-            </button>
-          </Link>
+      <section className="card">
+        <SectionHeader
+          eyebrow={FEATURES.repeatOffenders}
+          title="Fixes that didn't hold"
+          description="Reopened two or more times. These need a different contractor, budget or method, not another patch."
+        />
 
-          <Link to="/admin/sla">
-            <button type="button">
-              SLA Management
-            </button>
-          </Link>
+        {chronic.length === 0 ? (
+          <EmptyState icon={Recycle} title="No repeat offenders">
+            Every fix so far has held. Cases reopened twice or more
+            will show up here.
+          </EmptyState>
+        ) : (
+          <ul className="list-divided offender-list">
+            {chronic.map((issue) => (
+              <li key={issue.id}>
+                <Link to={`/issues/${issue.id}`} className="offender-row">
+                  <span className="offender-main">
+                    <strong>{issue.title}</strong>
+                    <span className="meta-row">
+                      {issue.category && (
+                        <CategoryChip category={issue.category} short />
+                      )}
+                      {issue.ward && <span>{issue.ward.name}</span>}
+                    </span>
+                  </span>
 
-          <Link to="/admin/users">
-            <button type="button">
-              Users &amp; Roles
-            </button>
-          </Link>
+                  {issue.reopenCount > 0 && (
+                    <span className="chip chip-warning">
+                      <Recycle aria-hidden="true" />
+                      Reopened {issue.reopenCount}×
+                    </span>
+                  )}
+                  <span className="chip chip-danger">
+                    {issue._count?.escalations || 0} escalations
+                  </span>
+                  <ArrowRight className="offender-arrow" aria-hidden="true" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-          <Link to="/admin/audit">
-            <button type="button">
-              Audit Log
-            </button>
-          </Link>
+      <section>
+        <SectionHeader eyebrow="Tools" title="Run the city" />
+
+        <div className="tool-grid">
+          {TOOLS.filter((tool) => can(tool.permission)).map(
+            ({ to, label, text, icon: Icon }) => (
+              <Link key={to} to={to} className="card card-link tool-card">
+                <span className="tool-icon" aria-hidden="true">
+                  <Icon />
+                </span>
+                <span>
+                  <strong>{label}</strong>
+                  <span>{text}</span>
+                </span>
+                <ArrowRight className="tool-arrow" aria-hidden="true" />
+              </Link>
+            )
+          )}
         </div>
       </section>
     </div>

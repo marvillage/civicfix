@@ -5,7 +5,7 @@ async function main() {
   const authority =
     await prisma.user.findUnique({
       where: {
-        email: "authority@civicfix.test",
+        email: "authority@fixity.test",
       },
     });
 

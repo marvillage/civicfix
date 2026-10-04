@@ -1,519 +1,563 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  AlertTriangle,
+  CircleCheck,
+  Hourglass,
+  Search,
+  ShieldAlert,
+  Timer,
+  TimerOff,
+  TimerReset,
+} from "lucide-react";
 import api from "../../api/axios";
+import { FEATURES } from "../../brand";
+import { useAuth } from "../../context/auth";
+import { Meter } from "../../components/charts";
+import {
+  EmptyState,
+  Loading,
+  PageHeader,
+  Segmented,
+  SectionHeader,
+  SeverityBadge,
+  StatTile,
+  StatusBadge,
+} from "../../components/ui";
+import { OPEN_STATUSES } from "../../lib/labels";
+import { formatDateTime, formatNumber, timeAgo } from "../../lib/format";
+import Modal from "../../components/ui/Modal";
+import { Notice } from "./adminKit";
+import {
+  apiError,
+  fixClock,
+  formatClockLength,
+  formatSpan,
+  shortId,
+  useNow,
+} from "./adminUtils";
+
+const VIEWS = [
+  { value: "all", label: "All" },
+  { value: "running", label: "Running" },
+  { value: "soon", label: "Due in 24 h" },
+  { value: "late", label: "Late" },
+  { value: "none", label: "No clock" },
+  { value: "done", label: "Stopped" },
+];
+
+const LATE = ["overdue", "breached", "escalated"];
+
+const PRESETS = [
+  { minutes: 240, label: "4 h", hint: "Red Alert" },
+  { minutes: 1440, label: "24 h", hint: "Urgent" },
+  { minutes: 4320, label: "3 d", hint: "Standard" },
+  { minutes: 10080, label: "7 d", hint: "Planned" },
+];
+
+const UNITS = { min: 1, h: 60, d: 1440 };
+
+function canSetClock(issue) {
+  return !issue.sla && !["CLOSED", "DUPLICATE"].includes(issue.status);
+}
+
+function matchesView(view, clock) {
+  if (view === "all") return true;
+  if (view === "running") return clock.state === "running" || clock.state === "soon";
+  if (view === "late") return LATE.includes(clock.state);
+
+  return clock.state === view;
+}
 
 export default function AdminSLA() {
+  const { can } = useAuth();
+  const canManage = can("sla:manage");
+  const now = useNow(15000);
+
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [view, setView] = useState("all");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null);
 
-  const [selectedIssue, setSelectedIssue] = useState(null);
-  const [durationMin, setDurationMin] = useState("");
-
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionMessage, setActionMessage] = useState("");
-
-  async function fetchIssues() {
+  const fetchIssues = useCallback(async () => {
     try {
-      setLoading(true);
-      setError("");
-
-      const response = await api.get("/issues/admin/all");
+      // Deadlines only matter for open cases.
+      const response = await api.get("/issues/admin/all", {
+        params: { view: "open", limit: 500 },
+      });
 
       setIssues(response.data.issues || []);
-    } catch (error) {
-      console.error("Fetch SLA issues error:", error);
-
-      setError(
-        error.response?.data?.message ||
-          "Unable to load SLA issue data."
-      );
+      setError("");
+    } catch (fetchError) {
+      console.error("Fetch Fix Clock error:", fetchError);
+      setError(apiError(fetchError, "Unable to load deadlines."));
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    fetchIssues();
   }, []);
 
-  function formatLabel(value) {
-    if (!value) return "";
-
-    return value
-      .replace(/_/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (char) => char.toUpperCase());
-  }
-
-  function formatDate(date) {
-    if (!date) return "—";
-
-    return new Date(date).toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  function getSLAState(issue) {
-    if (!issue.sla) {
-      return "NOT_SET";
-    }
-
-    if (issue.sla.breached || issue.status === "SLA_BREACHED") {
-      return "BREACHED";
-    }
-
-    if (issue.status === "ESCALATED") {
-      return "ESCALATED";
-    }
-
-    if (new Date(issue.sla.deadline) < new Date()) {
-      return "OVERDUE";
-    }
-
-    return "ACTIVE";
-  }
-
-  function openCreateSLA(issue) {
-    setSelectedIssue(issue);
-    setDurationMin("");
-    setActionMessage("");
-  }
-
-  function closeModal() {
-    if (actionLoading) return;
-
-    setSelectedIssue(null);
-    setDurationMin("");
-    setActionMessage("");
-  }
-
-  async function handleCreateSLA(event) {
-    event.preventDefault();
-
-    if (!selectedIssue) {
-      return;
-    }
-
-    const duration = Number(durationMin);
-
-    if (!Number.isInteger(duration) || duration <= 0) {
-      setActionMessage(
-        "Duration must be a positive whole number."
-      );
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      setActionMessage("");
-
-      const response = await api.post("/sla", {
-        issueId: selectedIssue.id,
-        durationMin: duration,
-      });
-
-      setActionMessage(
-        response.data.message ||
-          "SLA created successfully."
-      );
-
+  useEffect(() => {
+    // State is only set after the request resolves.
+    async function load() {
       await fetchIssues();
-
-      setTimeout(() => {
-        setSelectedIssue(null);
-        setDurationMin("");
-        setActionMessage("");
-      }, 700);
-    } catch (error) {
-      console.error("Create SLA error:", error);
-
-      setActionMessage(
-        error.response?.data?.message ||
-          "Unable to create SLA."
-      );
-    } finally {
-      setActionLoading(false);
     }
-  }
 
-  async function handleCheckBreaches() {
+    load();
+  }, [fetchIssues]);
+
+  async function checkBreaches() {
     try {
-      setActionLoading(true);
-      setActionMessage("");
+      setChecking(true);
+      setNotice(null);
 
-      const response = await api.post(
-        "/sla/check-breaches"
-      );
-
+      const response = await api.post("/sla/check-breaches");
       const count = response.data.breachedCount || 0;
 
-      setActionMessage(
-        count > 0
-          ? `${count} issue${
-              count === 1 ? "" : "s"
-            } breached the SLA.`
-          : "No new SLA breaches found."
-      );
+      setNotice({
+        tone: "success",
+        text:
+          count > 0
+            ? `${count} ${count === 1 ? "case" : "cases"} just breached the ${FEATURES.fixClock}.`
+            : "Breach check done. No new breaches.",
+      });
 
       await fetchIssues();
-    } catch (error) {
-      console.error(
-        "Check SLA breaches error:",
-        error
-      );
-
-      setActionMessage(
-        error.response?.data?.message ||
-          "Unable to check SLA breaches."
-      );
+    } catch (checkError) {
+      console.error("Breach check error:", checkError);
+      setNotice({ tone: "error", text: apiError(checkError, "Unable to run the breach check.") });
     } finally {
-      setActionLoading(false);
+      setChecking(false);
     }
   }
 
-  const totalIssues = issues.length;
-  const configuredSLAs = issues.filter(
-    (issue) => issue.sla
-  ).length;
-  const breachedSLAs = issues.filter(
-    (issue) => getSLAState(issue) === "BREACHED"
-  ).length;
-  const escalatedIssues = issues.filter(
-    (issue) => issue.status === "ESCALATED"
-  ).length;
+  const rows = useMemo(
+    () =>
+      issues
+        .filter((issue) => issue.status !== "DUPLICATE")
+        .map((issue) => ({ issue, clock: fixClock(issue, now) })),
+    [issues, now]
+  );
+
+  const stats = useMemo(() => {
+    const withClock = rows.filter((row) => row.issue.sla);
+    const breached = withClock.filter((row) =>
+      ["breached", "escalated"].includes(row.clock.state)
+    ).length;
+
+    return {
+      running: rows.filter((row) => ["running", "soon"].includes(row.clock.state)).length,
+      soon: rows.filter((row) => row.clock.state === "soon").length,
+      late: rows.filter((row) => LATE.includes(row.clock.state)).length,
+      none: rows.filter(
+        (row) => !row.issue.sla && OPEN_STATUSES.includes(row.issue.status)
+      ).length,
+      total: withClock.length,
+      breached,
+      compliance: withClock.length
+        ? ((withClock.length - breached) / withClock.length) * 100
+        : null,
+    };
+  }, [rows]);
+
+  const dueNext = rows
+    .filter((row) => ["running", "soon", "overdue"].includes(row.clock.state))
+    .sort((a, b) => a.clock.left - b.clock.left)
+    .slice(0, 5);
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+
+    return rows
+      .filter(({ clock }) => matchesView(view, clock))
+      .filter(
+        ({ issue }) =>
+          !needle ||
+          [issue.title, issue.id, issue.ward?.name, issue.address]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(needle)
+      )
+      .sort((a, b) => {
+        const left = (row) => (row.issue.sla ? row.clock.left : Infinity);
+
+        return left(a) - left(b);
+      });
+  }, [rows, view, query]);
 
   if (loading) {
-    return (
-      <div className="page">
-        <Link to="/admin">
-          ‹ Back to Admin Dashboard
-        </Link>
-
-        <h1>Manage SLA</h1>
-        <p>Loading SLA data...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="page">
-        <Link to="/admin">
-          ‹ Back to Admin Dashboard
-        </Link>
-
-        <h1>Manage SLA</h1>
-
-        <div className="form-error">
-          {error}
-        </div>
-      </div>
-    );
+    return <Loading label={`Loading the ${FEATURES.fixClock}…`} />;
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <Link to="/admin">
-          ‹ Back to Admin Dashboard
-        </Link>
+    <div className="page admin-page">
+      <PageHeader
+        eyebrow={FEATURES.fixClock}
+        title="Deadlines the city keeps"
+        description="Every case gets a clock that starts when it was reported. Miss it and the case breaches, then escalates up the chain."
+        actions={
+          canManage && (
+            <button
+              type="button"
+              className="btn-accent"
+              onClick={checkBreaches}
+              disabled={checking}
+            >
+              <ShieldAlert aria-hidden="true" />
+              {checking ? "Checking…" : "Run breach check"}
+            </button>
+          )
+        }
+      />
 
-        <p className="eyebrow">
-          ADMINISTRATION
-        </p>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      <Notice notice={notice} onDismiss={() => setNotice(null)} />
 
-        <h1>SLA Management</h1>
+      <section className="kpi-row" aria-label="Deadline counts">
+        <StatTile
+          label="Clocks running"
+          value={formatNumber(stats.running)}
+          hint="still inside their deadline"
+          icon={Timer}
+          tone="navy"
+        />
+        <StatTile
+          label="Due in 24 hours"
+          value={formatNumber(stats.soon)}
+          hint="about to run out"
+          icon={Hourglass}
+          tone="warning"
+        />
+        <StatTile
+          label="Late"
+          value={formatNumber(stats.late)}
+          hint="overdue, breached or escalated"
+          icon={AlertTriangle}
+          tone="danger"
+        />
+        <StatTile
+          label="No clock yet"
+          value={formatNumber(stats.none)}
+          hint="open cases without a deadline"
+          icon={TimerOff}
+        />
+      </section>
 
-        <p>
-          Set service-level deadlines and monitor
-          breached civic issues.
-        </p>
-      </div>
+      <section className="grid-2">
+        <div className="card deck-health">
+          <SectionHeader eyebrow="Promises" title="Deadlines met so far" />
 
-      <div className="details-card">
-        <p className="eyebrow">SLA OVERVIEW</p>
+          <Meter
+            label={
+              stats.total
+                ? `${stats.total - stats.breached} of ${stats.total} deadlines met`
+                : "No deadlines set yet"
+            }
+            value={stats.compliance}
+          />
 
-        <div className="issue-meta">
-          <span>
-            Total Issues: <strong>{totalIssues}</strong>
-          </span>
-
-          <span>
-            SLA Configured:{" "}
-            <strong>{configuredSLAs}</strong>
-          </span>
-
-          <span>
-            SLA Breached:{" "}
-            <strong>{breachedSLAs}</strong>
-          </span>
-
-          <span>
-            Escalated:{" "}
-            <strong>{escalatedIssues}</strong>
-          </span>
+          <p className="clock-explainer">
+            <TimerReset aria-hidden="true" />
+            <span>
+              The server checks every minute, marks late cases as breached and escalates
+              them. Run a check by hand after changing deadlines.
+            </span>
+          </p>
         </div>
 
-        <div className="modal-actions">
-          <button
-            type="button"
-            onClick={handleCheckBreaches}
-            disabled={actionLoading}
-          >
-            {actionLoading
-              ? "Checking..."
-              : "Check SLA Breaches"}
-          </button>
+        <div className="card">
+          <SectionHeader title="Due next" description="Open clocks, closest deadline first." />
+
+          {dueNext.length === 0 ? (
+            <EmptyState icon={CircleCheck} title="Nothing ticking">
+              No running clocks right now.
+            </EmptyState>
+          ) : (
+            <ul className="list-divided waiting-list">
+              {dueNext.map(({ issue, clock }) => (
+                <li key={issue.id}>
+                  <span className="person-stack due-main">
+                    <Link to={`/issues/${issue.id}`} className="case-link">
+                      {issue.title}
+                    </Link>
+                    <span>Due {formatDateTime(issue.sla.deadline)}</span>
+                  </span>
+                  <ClockChip clock={clock} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      <section className="stack" aria-label="Cases and deadlines">
+        <div className="filters-bar admin-filters">
+          <label className="search-field">
+            <span className="sr-only">Search cases</span>
+            <Search aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search title, ward or ID"
+            />
+          </label>
         </div>
 
-        {actionMessage && (
-          <div className="form-success">
-            {actionMessage}
+        <div className="admin-table-toolbar">
+          <Segmented label="Show clocks" options={VIEWS} value={view} onChange={setView} />
+          <p className="admin-count" aria-live="polite">
+            {formatNumber(visible.length)} {visible.length === 1 ? "case" : "cases"}
+          </p>
+        </div>
+
+        {visible.length === 0 ? (
+          <EmptyState icon={Timer} title="No cases in this view">
+            Try another view or search.
+          </EmptyState>
+        ) : (
+          <div className="table-scroll admin-table-scroll">
+            <table className="data-table admin-table">
+              <caption className="sr-only">Cases and their deadlines</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Case</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Severity</th>
+                  <th scope="col" className="num">Clock</th>
+                  <th scope="col">Deadline</th>
+                  <th scope="col">Countdown</th>
+                  <th scope="col">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map(({ issue, clock }) => (
+                  <tr key={issue.id}>
+                    <td>
+                      <div className="case-cell">
+                        <Link to={`/issues/${issue.id}`} className="case-link">
+                          {issue.title || "Untitled case"}
+                        </Link>
+                        <span className="case-meta">
+                          <span className="mono">#{shortId(issue.id)}</span>
+                          {issue.ward?.name && <span>{issue.ward.name}</span>}
+                          <span>reported {timeAgo(issue.createdAt, now)}</span>
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <StatusBadge status={issue.status} />
+                    </td>
+                    <td>
+                      <SeverityBadge severity={issue.severity} />
+                    </td>
+                    <td className="num">
+                      {issue.sla ? formatClockLength(issue.sla.durationMin) : "—"}
+                    </td>
+                    <td className="nowrap">
+                      {issue.sla ? (
+                        <>
+                          {formatDateTime(issue.sla.deadline)}
+                          {issue.sla.breachedAt && (
+                            <span className="cell-sub">
+                              Breached {formatDateTime(issue.sla.breachedAt)}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <ClockChip clock={clock} />
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {canManage && canSetClock(issue) && (
+                          <button
+                            type="button"
+                            className="btn-sm"
+                            onClick={() => setSelected(issue)}
+                            aria-label={`Set clock: ${issue.title}`}
+                          >
+                            <Timer aria-hidden="true" />
+                            Set clock
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
+      </section>
 
-      {issues.length === 0 ? (
-        <div className="details-card">
-          <p>No issues found.</p>
-        </div>
-      ) : (
-        <div className="issue-list">
-          {issues.map((issue) => {
-            const slaState = getSLAState(issue);
-
-            return (
-              <article
-                className="issue-card"
-                key={issue.id}
-              >
-                <div className="issue-card-header">
-                  <div>
-                    <p className="eyebrow">
-                      CIVIC ISSUE
-                    </p>
-
-                    <h2>
-                      {issue.title ||
-                        "Untitled Issue"}
-                    </h2>
-                  </div>
-
-                  <span className="status-badge">
-                    {formatLabel(issue.status)}
-                  </span>
-                </div>
-
-                <div className="issue-meta">
-                  <span>
-                    Category:{" "}
-                    {formatLabel(issue.category)}
-                  </span>
-
-                  <span>
-                    Severity:{" "}
-                    {formatLabel(issue.severity)}
-                  </span>
-
-                  <span>
-                    Reported:{" "}
-                    {formatDate(issue.createdAt)}
-                  </span>
-                </div>
-
-                <div className="issue-assignment">
-                  <strong>SLA Status</strong>
-
-                  <p>
-                    {slaState === "NOT_SET" &&
-                      "No SLA configured"}
-
-                    {slaState === "ACTIVE" &&
-                      "Active"}
-
-                    {slaState === "OVERDUE" &&
-                      "Deadline passed — breach pending check"}
-
-                    {slaState === "BREACHED" &&
-                      "SLA Breached"}
-
-                    {slaState === "ESCALATED" &&
-                      "Escalated"}
-                  </p>
-
-                  {issue.sla && (
-                    <>
-                      <p>
-                        Duration:{" "}
-                        {issue.sla.durationMin} minutes
-                      </p>
-
-                      <p>
-                        Deadline:{" "}
-                        {formatDate(
-                          issue.sla.deadline
-                        )}
-                      </p>
-
-                      {issue.sla.breachedAt && (
-                        <p>
-                          Breached At:{" "}
-                          {formatDate(
-                            issue.sla.breachedAt
-                          )}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <div className="issue-card-actions">
-                  {issue.sla ? (
-                    <button
-                      type="button"
-                      disabled
-                    >
-                      SLA Configured
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openCreateSLA(issue)
-                      }
-                      disabled={
-                        issue.status === "CLOSED" ||
-                        issue.status === "DUPLICATE"
-                      }
-                    >
-                      Set SLA
-                    </button>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-
-      {selectedIssue && (
-        <div
-          className="modal-backdrop"
-          onClick={(event) => {
-            if (
-              event.target === event.currentTarget
-            ) {
-              closeModal();
-            }
+      {selected && (
+        <SetClockDialog
+          issue={selected}
+          now={now}
+          onClose={() => setSelected(null)}
+          onDone={async (message) => {
+            setSelected(null);
+            setNotice({ tone: "success", text: message });
+            await fetchIssues();
           }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 9999,
-          }}
-        >
-          <div
-            className="modal"
-            onClick={(event) =>
-              event.stopPropagation()
-            }
-            style={{
-              position: "relative",
-              zIndex: 10000,
-            }}
-          >
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">
-                  CREATE SLA
-                </p>
-
-                <h2>
-                  {selectedIssue.title ||
-                    "Civic Issue"}
-                </h2>
-              </div>
-
-              <button
-                type="button"
-                onClick={closeModal}
-                disabled={actionLoading}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateSLA}>
-              <div className="form-group">
-                <label htmlFor="durationMin">
-                  SLA Duration (minutes)
-                </label>
-
-                <input
-                  id="durationMin"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={durationMin}
-                  onChange={(event) =>
-                    setDurationMin(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Example: 1440"
-                  disabled={actionLoading}
-                />
-
-                <small>
-                  The deadline will be calculated
-                  from the issue's reported time.
-                </small>
-              </div>
-
-              {actionMessage && (
-                <div
-                  className={
-                    actionMessage.includes(
-                      "successfully"
-                    )
-                      ? "form-success"
-                      : "form-error"
-                  }
-                >
-                  {actionMessage}
-                </div>
-              )}
-
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  disabled={actionLoading}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={
-                    actionLoading ||
-                    !durationMin
-                  }
-                >
-                  {actionLoading
-                    ? "Creating..."
-                    : "Create SLA"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        />
       )}
     </div>
+  );
+}
+
+function ClockChip({ clock }) {
+  if (clock.state === "none") {
+    return <span className="muted nowrap">No clock</span>;
+  }
+
+  const Icon =
+    clock.tone === "danger" ? AlertTriangle : clock.tone === "success" ? CircleCheck : Timer;
+
+  return (
+    <span className={`chip ${clock.tone ? `chip-${clock.tone}` : ""}`}>
+      <Icon aria-hidden="true" />
+      {clock.label}
+    </span>
+  );
+}
+
+function SetClockDialog({ issue, now, onClose, onDone }) {
+  const [preset, setPreset] = useState(issue.isEmergency ? 240 : 4320);
+  const [amount, setAmount] = useState("");
+  const [unit, setUnit] = useState("h");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const custom = amount !== "";
+  const durationMin = custom ? Math.round(Number(amount) * UNITS[unit]) : preset;
+  const valid = Number.isInteger(durationMin) && durationMin > 0;
+  const deadline = new Date(new Date(issue.createdAt).getTime() + durationMin * 60000);
+  const left = deadline.getTime() - now;
+
+  async function submit(event) {
+    event.preventDefault();
+
+    if (!valid) {
+      setError("Use a positive length of time.");
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setError("");
+
+      const response = await api.post("/sla", { issueId: issue.id, durationMin });
+
+      await onDone(
+        response.data.message ||
+          `${FEATURES.fixClock} set: ${formatClockLength(durationMin)} for "${issue.title}".`
+      );
+    } catch (submitError) {
+      console.error("Set Fix Clock error:", submitError);
+      setError(apiError(submitError, "Unable to set the clock."));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      eyebrow={`Set ${FEATURES.fixClock}`}
+      title={issue.title || "Untitled case"}
+      description={`The clock counts from when the case was reported (${timeAgo(issue.createdAt, now)}).`}
+      onClose={onClose}
+      busy={busy}
+    >
+      <form onSubmit={submit}>
+        <fieldset className="preset-group" disabled={busy}>
+          <legend>Length</legend>
+          <div className="preset-options">
+            {PRESETS.map((option) => (
+              <label
+                key={option.minutes}
+                className={`preset ${!custom && preset === option.minutes ? "is-picked" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="preset"
+                  value={option.minutes}
+                  checked={!custom && preset === option.minutes}
+                  onChange={() => {
+                    setPreset(option.minutes);
+                    setAmount("");
+                  }}
+                />
+                <strong>{option.label}</strong>
+                <span>{option.hint}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="form-row clock-custom">
+          <div className="field">
+            <label htmlFor="clock-amount">Or a custom length</label>
+            <input
+              id="clock-amount"
+              type="number"
+              min="1"
+              step="any"
+              inputMode="decimal"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              placeholder="e.g. 36"
+              disabled={busy}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="clock-unit">Unit</label>
+            <select
+              id="clock-unit"
+              value={unit}
+              onChange={(event) => setUnit(event.target.value)}
+              disabled={busy}
+            >
+              <option value="min">Minutes</option>
+              <option value="h">Hours</option>
+              <option value="d">Days</option>
+            </select>
+          </div>
+        </div>
+
+        {valid && (
+          <p className={`clock-preview ${left <= 0 ? "is-late" : ""}`} aria-live="polite">
+            {left <= 0 ? <AlertTriangle aria-hidden="true" /> : <Timer aria-hidden="true" />}
+            <span>
+              Deadline <strong>{formatDateTime(deadline)}</strong>
+              {left <= 0
+                ? `, already ${formatSpan(left)} ago. It will breach on the next check.`
+                : `, ${formatSpan(left)} from now.`}
+            </span>
+          </p>
+        )}
+
+        {error && <div className="form-error" role="alert">{error}</div>}
+
+        <div className="modal-actions">
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-accent" disabled={busy || !valid}>
+            <Timer aria-hidden="true" />
+            {busy ? "Starting…" : "Start the clock"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

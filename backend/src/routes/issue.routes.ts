@@ -1,12 +1,14 @@
 import { Router } from "express";
 
 import { authenticate } from "../middleware/auth.middleware";
-import { authorizeRoles } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/role.middleware";
+import { validate } from "../middleware/validate.middleware";
 
 import {
   getPublicIssuesController,
   getIssueByIdController,
   getAllIssuesController,
+  adminIssuesQuerySchema,
   getNearbyIssuesController,
   updateIssueStatusController,
   markDuplicateController,
@@ -39,7 +41,8 @@ router.get(
 router.get(
   "/admin/all",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("issue:read:all"),
+  validate({ query: adminIssuesQuerySchema }),
   getAllIssuesController
 );
 
@@ -56,18 +59,23 @@ router.get(
 router.post(
   "/:issueId/comments",
   authenticate,
+  requirePermission("issue:comment"),
   createCommentController
 );
 
+// Direct Line: the service also checks the caller is the
+// reporter, the assigned officer or an admin.
 router.get(
   "/:issueId/messages",
   authenticate,
+  requirePermission("issue:message"),
   getIssueMessagesController
 );
 
 router.post(
   "/:issueId/messages",
   authenticate,
+  requirePermission("issue:message"),
   sendIssueMessageController
 );
 
@@ -87,14 +95,14 @@ router.get(
 router.patch(
   "/:issueId/status",
   authenticate,
-  authorizeRoles("AUTHORITY", "ADMIN"),
+  requirePermission("issue:status"),
   updateIssueStatusController
 );
 
 router.post(
   "/:issueId/duplicate",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("issue:duplicate"),
   markDuplicateController
 );
 

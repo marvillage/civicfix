@@ -1,6 +1,7 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
+import { BRAND } from "../config/brand";
 
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
 function getTransporter() {
   if (transporter) {
@@ -47,7 +48,7 @@ export async function sendEmail(
     await mailer.sendMail({
       from:
         process.env.EMAIL_FROM ??
-        `CivicFix <${process.env.EMAIL_USER}>`,
+        `${BRAND.name} <${process.env.EMAIL_USER}>`,
       to,
       subject,
       text,

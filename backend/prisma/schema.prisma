@@ -12,38 +12,47 @@ datasource db {
 // ─────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
+  id           String @id @default(cuid())
   name         String
-  email        String   @unique
+  email        String @unique
   passwordHash String
-  role         Role     @default(CITIZEN)
-  points       Int      @default(0)
+  role         Role   @default(CITIZEN)
+  points       Int    @default(0)
 
-  avatarUrl    String?
-  bio          String?
-  ward         String?
+  avatarUrl String?
+  bio       String?
+  ward      String?
 
   // Staff accounts start unverified until an admin approves them
-  isVerified   Boolean  @default(true)
+  isVerified Boolean @default(true)
 
   // Authority-only identity fields
-  employeeId   String?  @unique
+  employeeId   String? @unique
   designation  String?
   phone        String?
   departmentId String?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  department       Department?        @relation(fields: [departmentId], references: [id])
-  complaints       Complaint[]
-  upvotes          Upvote[]
-  statusUpdates    StatusHistory[]
-  assignments      Assignment[]       @relation("AssignedOfficer")
-  notifications    Notification[]
-  verifications    ResolutionVerification[]
-  comments         Comment[]
-  messages         Message[]
+  department    Department?              @relation(fields: [departmentId], references: [id])
+  complaints    Complaint[]
+  upvotes       Upvote[]
+  statusUpdates StatusHistory[]
+  assignments   Assignment[]             @relation("AssignedOfficer")
+  notifications Notification[]
+  verifications ResolutionVerification[]
+  comments      Comment[]
+  messages      Message[]
+
+  bulletins       Bulletin[]
+  watchZones      WatchZone[]
+  pollsCreated    Poll[]
+  pollVotes       PollVote[]
+  costsLogged     WorkCost[]
+  drivesOrganized Drive[]
+  driveRsvps      DriveRsvp[]
+  auditEvents     AuditEvent[]
 }
 
 // ─────────────────────────────────────────────
@@ -52,32 +61,32 @@ model User {
 // ─────────────────────────────────────────────
 
 model Issue {
-  id            String       @id @default(cuid())
-  title         String
-  description   String?
-  category      IssueCategory
-  severity      Severity
-  status        IssueStatus  @default(REPORTED)
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  category    IssueCategory
+  severity    Severity
+  status      IssueStatus   @default(REPORTED)
 
-  isEmergency   Boolean @default(false)
-  reopenCount   Int     @default(0)
+  isEmergency Boolean @default(false)
+  reopenCount Int     @default(0)
 
-  latitude      Float
-  longitude     Float
-  address       String?
+  latitude  Float
+  longitude Float
+  address   String?
 
-  aiConfidence  Float?
+  aiConfidence Float?
 
   resolutionImageUrl String?
 
-  departmentId  String?
-  wardId        String?
+  departmentId String?
+  wardId       String?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  department    Department?      @relation(fields: [departmentId], references: [id])
-  ward          Ward?            @relation(fields: [wardId], references: [id])
+  department    Department?             @relation(fields: [departmentId], references: [id])
+  ward          Ward?                   @relation(fields: [wardId], references: [id])
   complaints    Complaint[]
   assignments   Assignment[]
   upvotes       Upvote[]
@@ -87,6 +96,13 @@ model Issue {
   verification  ResolutionVerification?
   comments      Comment[]
   messages      Message[]
+  costs         WorkCost[]
+  pollOptions   PollOption[]
+  drives        Drive[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([wardId])
 }
 
 // ─────────────────────────────────────────────
@@ -95,23 +111,23 @@ model Issue {
 // ─────────────────────────────────────────────
 
 model Complaint {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  citizenId   String?
-  issueId     String
+  citizenId String?
+  issueId   String
 
   imageUrl    String
   photos      String[] @default([])
   audioUrl    String?
   description String?
 
-  latitude    Float
-  longitude   Float
+  latitude  Float
+  longitude Float
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  citizen     User?  @relation(fields: [citizenId], references: [id])
-  issue       Issue  @relation(fields: [issueId], references: [id])
+  citizen User? @relation(fields: [citizenId], references: [id])
+  issue   Issue @relation(fields: [issueId], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -128,6 +144,8 @@ model Department {
   assignments   Assignment[]
   authorities   User[]
   categoryRules CategoryRule[]
+  bulletins     Bulletin[]
+  budgets       DepartmentBudget[]
 }
 
 // ─────────────────────────────────────────────
@@ -140,10 +158,10 @@ model CategoryRule {
   category     IssueCategory @unique
   departmentId String
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  department   Department @relation(fields: [departmentId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -159,6 +177,9 @@ model Ward {
 
   issues      Issue[]
   assignments Assignment[]
+  bulletins   Bulletin[]
+  polls       Poll[]
+  drives      Drive[]
 }
 
 // ─────────────────────────────────────────────
@@ -166,21 +187,21 @@ model Ward {
 // ─────────────────────────────────────────────
 
 model Assignment {
-  id           String   @id @default(cuid())
+  id String @id @default(cuid())
 
   issueId      String
   authorityId  String
   departmentId String?
   wardId       String?
 
-  assignedAt   DateTime @default(now())
-  acceptedAt   DateTime?
-  completedAt  DateTime?
+  assignedAt  DateTime  @default(now())
+  acceptedAt  DateTime?
+  completedAt DateTime?
 
-  issue        Issue       @relation(fields: [issueId], references: [id])
-  authority    User        @relation("AssignedOfficer", fields: [authorityId], references: [id])
-  department   Department? @relation(fields: [departmentId], references: [id])
-  ward         Ward?       @relation(fields: [wardId], references: [id])
+  issue      Issue       @relation(fields: [issueId], references: [id])
+  authority  User        @relation("AssignedOfficer", fields: [authorityId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  ward       Ward?       @relation(fields: [wardId], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -194,8 +215,8 @@ model Upvote {
   issueId   String
   createdAt DateTime @default(now())
 
-  user      User  @relation(fields: [userId], references: [id])
-  issue     Issue @relation(fields: [issueId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  issue Issue @relation(fields: [issueId], references: [id])
 
   @@unique([userId, issueId])
 }
@@ -214,8 +235,8 @@ model StatusHistory {
   imageUrl  String?
   createdAt DateTime    @default(now())
 
-  issue     Issue @relation(fields: [issueId], references: [id])
-  user      User? @relation(fields: [changedBy], references: [id])
+  issue Issue @relation(fields: [issueId], references: [id])
+  user  User? @relation(fields: [changedBy], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -224,19 +245,19 @@ model StatusHistory {
 // ─────────────────────────────────────────────
 
 model SLA {
-  id          String   @id @default(cuid())
-  issueId     String   @unique
+  id      String @id @default(cuid())
+  issueId String @unique
 
   durationMin Int
   deadline    DateTime
 
-  breached    Boolean  @default(false)
-  breachedAt  DateTime?
+  breached   Boolean   @default(false)
+  breachedAt DateTime?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  issue       Issue @relation(fields: [issueId], references: [id])
+  issue Issue @relation(fields: [issueId], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -244,16 +265,16 @@ model SLA {
 // ─────────────────────────────────────────────
 
 model Escalation {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  issueId     String
-  level       Int
-  reason      String
+  issueId String
+  level   Int
+  reason  String
 
-  escalatedAt DateTime @default(now())
+  escalatedAt DateTime  @default(now())
   resolvedAt  DateTime?
 
-  issue       Issue @relation(fields: [issueId], references: [id])
+  issue Issue @relation(fields: [issueId], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -261,16 +282,16 @@ model Escalation {
 // ─────────────────────────────────────────────
 
 model Comment {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  issueId   String
-  userId    String
-  text      String
+  issueId String
+  userId  String
+  text    String
 
   createdAt DateTime @default(now())
 
-  issue     Issue @relation(fields: [issueId], references: [id])
-  user      User  @relation(fields: [userId], references: [id])
+  issue Issue @relation(fields: [issueId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -278,16 +299,16 @@ model Comment {
 // ─────────────────────────────────────────────
 
 model Notification {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId    String
-  title     String
-  message   String
-  isRead    Boolean  @default(false)
+  userId  String
+  title   String
+  message String
+  isRead  Boolean @default(false)
 
   createdAt DateTime @default(now())
 
-  user      User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -296,18 +317,18 @@ model Notification {
 // ─────────────────────────────────────────────
 
 model ResolutionVerification {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  issueId     String   @unique
-  citizenId   String
+  issueId   String @unique
+  citizenId String
 
-  verified    Boolean
-  comment     String?
-  stars       Int?
-  createdAt   DateTime @default(now())
+  verified  Boolean
+  comment   String?
+  stars     Int?
+  createdAt DateTime @default(now())
 
-  issue       Issue @relation(fields: [issueId], references: [id])
-  citizen     User  @relation(fields: [citizenId], references: [id])
+  issue   Issue @relation(fields: [issueId], references: [id])
+  citizen User  @relation(fields: [citizenId], references: [id])
 }
 
 // ─────────────────────────────────────────────
@@ -317,16 +338,229 @@ model ResolutionVerification {
 // ─────────────────────────────────────────────
 
 model Message {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  issueId   String
-  senderId  String
-  text      String
+  issueId  String
+  senderId String
+  text     String
 
   createdAt DateTime @default(now())
 
-  issue     Issue @relation(fields: [issueId], references: [id])
-  sender    User  @relation(fields: [senderId], references: [id])
+  issue  Issue @relation(fields: [issueId], references: [id])
+  sender User  @relation(fields: [senderId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// WARD BULLETIN
+// Planned works, outages and advisories posted by
+// officers and admins. wardId null = citywide.
+// ─────────────────────────────────────────────
+
+model Bulletin {
+  id     String       @id @default(cuid())
+  title  String
+  body   String
+  kind   BulletinKind
+  pinned Boolean      @default(false)
+
+  wardId       String?
+  departmentId String?
+  authorId     String
+
+  startsAt DateTime
+  endsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ward       Ward?       @relation(fields: [wardId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  author     User        @relation(fields: [authorId], references: [id])
+
+  @@index([wardId, startsAt])
+  @@index([endsAt])
+}
+
+// ─────────────────────────────────────────────
+// WATCH ZONE
+// A circle a user cares about; new cases inside it
+// trigger a notification. Empty categories = all.
+// ─────────────────────────────────────────────
+
+model WatchZone {
+  id         String          @id @default(cuid())
+  userId     String
+  name       String
+  latitude   Float
+  longitude  Float
+  radiusM    Int
+  categories IssueCategory[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// WARD VOTE
+// Participatory polls: one vote per citizen per poll,
+// enforced by a unique constraint, not just app code.
+// ─────────────────────────────────────────────
+
+model Poll {
+  id          String  @id @default(cuid())
+  question    String
+  description String?
+
+  wardId      String?
+  createdById String
+
+  closesAt DateTime
+  closedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  ward      Ward?        @relation(fields: [wardId], references: [id])
+  createdBy User         @relation(fields: [createdById], references: [id])
+  options   PollOption[]
+  votes     PollVote[]
+
+  @@index([closesAt])
+}
+
+model PollOption {
+  id       String  @id @default(cuid())
+  pollId   String
+  label    String
+  issueId  String?
+  position Int     @default(0)
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  issue Issue?     @relation(fields: [issueId], references: [id])
+  votes PollVote[]
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  optionId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id])
+
+  @@unique([pollId, userId])
+}
+
+// ─────────────────────────────────────────────
+// COST LEDGER
+// What each fix cost, and what each department
+// was given to spend. Amounts are whole rupees.
+// ─────────────────────────────────────────────
+
+model WorkCost {
+  id          String   @id @default(cuid())
+  issueId     String
+  loggedById  String
+  kind        CostKind
+  description String
+  amount      Int
+  createdAt   DateTime @default(now())
+
+  issue    Issue @relation(fields: [issueId], references: [id])
+  loggedBy User  @relation(fields: [loggedById], references: [id])
+
+  @@index([issueId])
+  @@index([createdAt])
+}
+
+model DepartmentBudget {
+  id           String @id @default(cuid())
+  departmentId String
+  month        String // "YYYY-MM"
+  amount       Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id])
+
+  @@unique([departmentId, month])
+}
+
+// ─────────────────────────────────────────────
+// CLEANUP DRIVE
+// Citizen-organised volunteer events: proposed,
+// moderated by an admin, then open for RSVPs.
+// ─────────────────────────────────────────────
+
+model Drive {
+  id          String @id @default(cuid())
+  title       String
+  description String
+  organizerId String
+
+  wardId  String?
+  issueId String?
+
+  latitude  Float
+  longitude Float
+  address   String?
+
+  startsAt       DateTime
+  capacity       Int
+  status         DriveStatus @default(PROPOSED)
+  moderationNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizer User        @relation(fields: [organizerId], references: [id])
+  ward      Ward?       @relation(fields: [wardId], references: [id])
+  issue     Issue?      @relation(fields: [issueId], references: [id])
+  rsvps     DriveRsvp[]
+
+  @@index([status, startsAt])
+}
+
+model DriveRsvp {
+  id        String   @id @default(cuid())
+  driveId   String
+  userId    String
+  attended  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  drive Drive @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([driveId, userId])
+}
+
+// ─────────────────────────────────────────────
+// AUDIT EVENT
+// Privileged actions outside the issue timeline:
+// role changes, budgets, moderation, bulletins...
+// ─────────────────────────────────────────────
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([createdAt])
+  @@index([action])
 }
 
 // ─────────────────────────────────────────────
@@ -368,4 +602,26 @@ enum IssueStatus {
   SLA_BREACHED
   ESCALATED
   REOPENED
+}
+
+enum BulletinKind {
+  OUTAGE
+  ROADWORKS
+  ADVISORY
+  EVENT
+}
+
+enum CostKind {
+  MATERIAL
+  LABOUR
+  EQUIPMENT
+  CONTRACTOR
+}
+
+enum DriveStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
 }

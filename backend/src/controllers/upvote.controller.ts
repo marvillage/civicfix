@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { param } from "../lib/http";
 import { upvoteIssue } from "../services/upvote.service";
 
 export async function upvoteIssueController(
@@ -13,7 +14,7 @@ export async function upvoteIssueController(
       });
     }
 
-    const { issueId } = req.params;
+    const issueId = param(req, "issueId");
 
     if (!issueId) {
       return res.status(400).json({

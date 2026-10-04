@@ -1,0 +1,310 @@
+/* =========================================================
+   CITY PULSE — public analytics
+========================================================= */
+
+.pulse-filters {
+  position: sticky;
+  top: calc(var(--topbar-h) + 8px);
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: saturate(1.3) blur(10px);
+}
+
+.public-shell .pulse-filters {
+  top: 76px;
+}
+
+.pulse-select {
+  flex: 0 1 200px;
+}
+
+.pulse-select select {
+  min-height: 38px;
+  font-size: 14px;
+}
+
+.pulse-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pulse-scope .spinner {
+  width: 14px;
+  height: 14px;
+}
+
+.pulse-body {
+  display: grid;
+  gap: 22px;
+  transition: opacity 200ms var(--ease);
+}
+
+/* Refetch keeps the frame: dim, don't blank. */
+.pulse-body.is-refreshing {
+  opacity: 0.55;
+}
+
+.pulse-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.pulse-kpis .sparkline {
+  margin-top: 4px;
+}
+
+.pulse-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+/* Ward scorecards */
+
+.pulse-wards-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.ward-map .leaflet-container {
+  min-height: 360px;
+}
+
+.ward-grade-label span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: #0a1730;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 900;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.ward-score-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  margin: 0;
+  padding: 0 2px 0 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.ward-score {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+
+.ward-score:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.ward-score.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.ward-score-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ward-score-main strong {
+  font-size: 14.5px;
+}
+
+.ward-score-main .meter-labels {
+  font-size: 12px;
+}
+
+.ward-score-main .meter {
+  height: 6px;
+}
+
+.ward-score-open {
+  display: grid;
+  justify-items: end;
+  line-height: 1.1;
+}
+
+.ward-score-open strong {
+  font-size: 20px;
+}
+
+.ward-score-open span {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.grade-badge {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--neutral-soft);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.grade-A,
+.grade-B {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.grade-C {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.grade-D,
+.grade-F {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.ward-focus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-size: 14px;
+}
+
+.ward-focus > span:nth-child(2) {
+  flex: 1 1 260px;
+  color: var(--text-2);
+}
+
+/* Departments table */
+
+.pulse-table-head {
+  padding: 20px 22px 0;
+}
+
+.pulse-table {
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.pulse-table th[scope="row"] {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+}
+
+.pulse-table tbody tr:last-child th {
+  border-bottom: 0;
+}
+
+.table-meter {
+  display: grid;
+  grid-template-columns: minmax(80px, 140px) 44px;
+  align-items: center;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inline-icon {
+  width: 13px;
+  height: 13px;
+  margin-right: 1px;
+  vertical-align: -1px;
+  color: var(--text-3);
+}
+
+.pulse-note {
+  max-width: 80ch;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+@media (max-width: 1080px) {
+  .pulse-hero,
+  .pulse-wards-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ward-score-list {
+    max-height: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .pulse-filters {
+    position: static;
+  }
+
+  .pulse-filters .segmented {
+    width: 100%;
+  }
+
+  .pulse-filters .segmented button {
+    flex: 1;
+  }
+
+  .pulse-select {
+    flex: 1 1 140px;
+  }
+
+  .pulse-scope {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .ward-score {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .grade-badge {
+    width: 38px;
+    height: 38px;
+    font-size: 19px;
+  }
+}

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware";
-import { authorizeRoles } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/role.middleware";
 import { reportUpload } from "../middleware/upload.middleware";
 import {
   createComplaintController,
@@ -17,6 +17,7 @@ const router = Router();
 router.post(
   "/",
   authenticate,
+  requirePermission("issue:report"),
   reportUpload,
   createComplaintController
 );
@@ -30,10 +31,13 @@ router.post(
 router.post(
   "/field",
   authenticate,
-  authorizeRoles("AUTHORITY", "ADMIN"),
+  requirePermission("field:report"),
   reportUpload,
   createFieldReportController
 );
+
+// The routes below only need a signed-in user: the services
+// scope every query to the caller's own complaints.
 
 router.get(
   "/my",

@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { param } from "../lib/http";
 import {
   getIssueComments,
   createComment,
@@ -10,7 +11,7 @@ export async function getIssueCommentsController(
   res: Response
 ) {
   try {
-    const { issueId } = req.params;
+    const issueId = param(req, "issueId");
 
     const comments = await getIssueComments(issueId);
 
@@ -37,7 +38,7 @@ export async function createCommentController(
       });
     }
 
-    const { issueId } = req.params;
+    const issueId = param(req, "issueId");
     const { text } = req.body;
 
     if (

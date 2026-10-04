@@ -1,95 +1,57 @@
-﻿import { useEffect, useState } from "react";
+import { lazy, Suspense } from "react";
 import {
   BrowserRouter,
   Link,
+  Navigate,
   Route,
   Routes,
-  useLocation,
 } from "react-router-dom";
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import Layout from "./components/layout/Layout";
+import { Loading } from "./components/ui";
 import { DEMO_MODE } from "./api/axios";
 import DemoBadge from "./demo/DemoBadge";
 
+import Landing from "./pages/Landing";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import AuthoritySignup from "./pages/auth/AuthoritySignup";
 
-import PublicIssues from "./pages/public/PublicIssues";
-import PublicIssueDetails from "./pages/public/PublicIssueDetails";
-import PublicReport from "./pages/public/PublicReport";
-import PublicStats from "./pages/public/PublicStats";
-import Landing from "./pages/Landing";
-import FieldReport from "./pages/authority/FieldReport";
+// Route-level code splitting: each area downloads on first visit.
+const PublicIssues = lazy(() => import("./pages/public/PublicIssues"));
+const PublicIssueDetails = lazy(() => import("./pages/public/PublicIssueDetails"));
+const PublicReport = lazy(() => import("./pages/public/PublicReport"));
+const CityPulse = lazy(() => import("./pages/pulse/CityPulse"));
 
-import CitizenDashboard from "./pages/citizen/CitizenDashboard";
-import ReportIssue from "./pages/citizen/ReportIssue";
-import MyComplaints from "./pages/citizen/MyComplaints";
-import ComplaintDetails from "./pages/citizen/ComplaintDetails";
+const Bulletins = lazy(() => import("./pages/community/Bulletins"));
+const WatchZones = lazy(() => import("./pages/community/WatchZones"));
+const Polls = lazy(() => import("./pages/community/Polls"));
+const PollDetail = lazy(() => import("./pages/community/PollDetail"));
+const Drives = lazy(() => import("./pages/community/Drives"));
+const DriveDetail = lazy(() => import("./pages/community/DriveDetail"));
+const DriveNew = lazy(() => import("./pages/community/DriveNew"));
 
-import AuthorityDashboard from "./pages/authority/AuthorityDashboard";
-import AuthorityIssueDetails from "./pages/authority/AuthorityIssueDetails";
+const Profile = lazy(() => import("./pages/Profile"));
 
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminIssues from "./pages/admin/AdminIssues";
-import AdminOrganization from "./pages/admin/AdminOrganization";
-import AdminSLA from "./pages/admin/AdminSLA";
-import AdminAssignments from "./pages/admin/AdminAssignments";
-import AdminUsers from "./pages/admin/AdminUsers";
-import AdminAudit from "./pages/admin/AdminAudit";
-import Profile from "./pages/Profile";
+const CitizenDashboard = lazy(() => import("./pages/citizen/CitizenDashboard"));
+const ReportIssue = lazy(() => import("./pages/citizen/ReportIssue"));
+const MyComplaints = lazy(() => import("./pages/citizen/MyComplaints"));
+const ComplaintDetails = lazy(() => import("./pages/citizen/ComplaintDetails"));
 
-function ThemeManager() {
-  const { pathname } = useLocation();
+const AuthorityDashboard = lazy(() => import("./pages/authority/AuthorityDashboard"));
+const AuthorityIssueDetails = lazy(() => import("./pages/authority/AuthorityIssueDetails"));
+const FieldReport = lazy(() => import("./pages/authority/FieldReport"));
 
-  const isNightRoute =
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/authority");
-
-  const [dark, setDark] = useState(
-    () =>
-      localStorage.getItem("civicfix_theme") ===
-      "dark"
-  );
-
-  useEffect(() => {
-    if (isNightRoute) {
-      document.documentElement.dataset.theme = "night";
-    } else if (dark) {
-      document.documentElement.dataset.theme = "dark";
-    } else {
-      delete document.documentElement.dataset.theme;
-    }
-  }, [isNightRoute, dark]);
-
-  if (isNightRoute) {
-    return null;
-  }
-
-  return (
-    <button
-      type="button"
-      className="theme-toggle"
-      aria-label={
-        dark
-          ? "Switch to light mode"
-          : "Switch to dark mode"
-      }
-      onClick={() => {
-        const next = !dark;
-
-        setDark(next);
-
-        localStorage.setItem(
-          "civicfix_theme",
-          next ? "dark" : "light"
-        );
-      }}
-    >
-      {dark ? "☀" : "☾"}
-    </button>
-  );
-}
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminIssues = lazy(() => import("./pages/admin/AdminIssues"));
+const AdminAssignments = lazy(() => import("./pages/admin/AdminAssignments"));
+const AdminOrganization = lazy(() => import("./pages/admin/AdminOrganization"));
+const AdminSLA = lazy(() => import("./pages/admin/AdminSLA"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminAudit = lazy(() => import("./pages/admin/AdminAudit"));
+const AccessMatrix = lazy(() => import("./pages/admin/AccessMatrix"));
+const Budgets = lazy(() => import("./pages/admin/Budgets"));
 
 function NotFound() {
   return (
@@ -102,15 +64,16 @@ function NotFound() {
         }}
       />
 
+      <p className="not-found-code">ERROR 404 · ROAD CLOSED</p>
+
       <h1>Wrong turn</h1>
 
       <p>
-        This page doesn't exist. Head back to safer
-        roads.
+        This page doesn't exist. Head back to safer roads.
       </p>
 
-      <Link to="/">
-        <button type="button">Go home</button>
+      <Link to="/" className="btn btn-accent">
+        Go home
       </Link>
     </div>
   );
@@ -119,180 +82,105 @@ function NotFound() {
 export default function App() {
   return (
     <BrowserRouter>
-      <ThemeManager />
       {DEMO_MODE && <DemoBadge />}
-      <Routes>
-        {/* PUBLIC */}
 
-        <Route
-          path="/"
-          element={<Landing />}
-        />
-
-        <Route
-          path="/login"
-          element={<Login />}
-        />
-
-        <Route
-          path="/register"
-          element={<Register />}
-        />
-
-        <Route
-          path="/register/authority"
-          element={<AuthoritySignup />}
-        />
-
-        <Route
-          path="/issues"
-          element={<PublicIssues />}
-        />
-
-        <Route
-          path="/issues/:id"
-          element={<PublicIssueDetails />}
-        />
-
-        <Route
-          path="/report"
-          element={<PublicReport />}
-        />
-
-        <Route
-          path="/stats"
-          element={<PublicStats />}
-        />
-
-        {/* ANY LOGGED-IN ROLE */}
-
-        <Route
-          element={
-            <ProtectedRoute
-              allowedRoles={[
-                "CITIZEN",
-                "AUTHORITY",
-                "ADMIN",
-              ]}
-            />
-          }
-        >
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          {/* Stand-alone pages with their own chrome */}
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           <Route
-            path="/profile"
-            element={<Profile />}
-          />
-        </Route>
-
-        {/* CITIZEN */}
-
-        <Route
-          element={
-            <ProtectedRoute
-              allowedRoles={["CITIZEN"]}
-            />
-          }
-        >
-          <Route
-            path="/citizen"
-            element={<CitizenDashboard />}
+            path="/register/authority"
+            element={<AuthoritySignup />}
           />
 
-          <Route
-            path="/citizen/report"
-            element={<ReportIssue />}
-          />
+          {/* Everything else: workspace when signed in, public chrome otherwise */}
+          <Route element={<Layout />}>
+            {/* PUBLIC */}
+            <Route path="/issues" element={<PublicIssues />} />
+            <Route path="/issues/:id" element={<PublicIssueDetails />} />
+            <Route path="/report" element={<PublicReport />} />
+            <Route path="/pulse" element={<CityPulse />} />
+            <Route path="/stats" element={<Navigate to="/pulse" replace />} />
+            <Route path="/bulletins" element={<Bulletins />} />
+            <Route path="/polls" element={<Polls />} />
+            <Route path="/polls/:id" element={<PollDetail />} />
+            <Route path="/drives" element={<Drives />} />
+            <Route path="/drives/:id" element={<DriveDetail />} />
 
-          <Route
-            path="/citizen/complaints"
-            element={<MyComplaints />}
-          />
+            {/* ANY SIGNED-IN ROLE */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/profile" element={<Profile />} />
+            </Route>
 
-          <Route
-            path="/citizen/complaints/:id"
-            element={<ComplaintDetails />}
-          />
-        </Route>
+            <Route element={<ProtectedRoute permission="watchzone:manage" />}>
+              <Route path="/watch-zones" element={<WatchZones />} />
+            </Route>
 
-        {/* AUTHORITY */}
+            <Route element={<ProtectedRoute permission="drive:propose" />}>
+              <Route path="/drives/new" element={<DriveNew />} />
+            </Route>
 
-        <Route
-          element={
-            <ProtectedRoute
-              allowedRoles={[
-                "AUTHORITY",
-                "ADMIN",
-              ]}
-            />
-          }
-        >
-          <Route
-            path="/authority"
-            element={<AuthorityDashboard />}
-          />
+            <Route element={<ProtectedRoute permission="budget:read" />}>
+              <Route path="/budgets" element={<Budgets />} />
+            </Route>
 
-          <Route
-            path="/authority/issues/:id"
-            element={<AuthorityIssueDetails />}
-          />
+            {/* CITIZEN */}
+            <Route element={<ProtectedRoute allowedRoles={["CITIZEN"]} />}>
+              <Route path="/citizen" element={<CitizenDashboard />} />
+              <Route path="/citizen/report" element={<ReportIssue />} />
+              <Route path="/citizen/complaints" element={<MyComplaints />} />
+              <Route path="/citizen/complaints/:id" element={<ComplaintDetails />} />
+            </Route>
 
-          <Route
-            path="/authority/report"
-            element={<FieldReport />}
-          />
-        </Route>
+            {/* OFFICERS (admins may open officer views too) */}
+            <Route element={<ProtectedRoute permission="assignment:work" />}>
+              <Route path="/authority" element={<AuthorityDashboard />} />
+              <Route path="/authority/issues/:id" element={<AuthorityIssueDetails />} />
+            </Route>
 
-        {/* ADMIN */}
+            <Route element={<ProtectedRoute permission="field:report" />}>
+              <Route path="/authority/report" element={<FieldReport />} />
+            </Route>
 
-        <Route
-          element={
-            <ProtectedRoute
-              allowedRoles={["ADMIN"]}
-            />
-          }
-        >
-          <Route
-            path="/admin"
-            element={<AdminDashboard />}
-          />
+            {/* ADMIN */}
+            <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
+              <Route path="/admin" element={<AdminDashboard />} />
+            </Route>
 
-          <Route
-            path="/admin/issues"
-            element={<AdminIssues />}
-          />
+            <Route element={<ProtectedRoute permission="issue:read:all" />}>
+              <Route path="/admin/issues" element={<AdminIssues />} />
+            </Route>
 
-          <Route
-            path="/admin/assignments"
-            element={<AdminAssignments />}
-          />
+            <Route element={<ProtectedRoute permission="assignment:read:all" />}>
+              <Route path="/admin/assignments" element={<AdminAssignments />} />
+            </Route>
 
-          <Route
-            path="/admin/organization"
-            element={<AdminOrganization />}
-          />
+            <Route element={<ProtectedRoute permission="org:manage" />}>
+              <Route path="/admin/organization" element={<AdminOrganization />} />
+            </Route>
 
-          <Route
-            path="/admin/sla"
-            element={<AdminSLA />}
-          />
+            <Route element={<ProtectedRoute permission="sla:manage" />}>
+              <Route path="/admin/sla" element={<AdminSLA />} />
+            </Route>
 
-          <Route
-            path="/admin/users"
-            element={<AdminUsers />}
-          />
+            <Route element={<ProtectedRoute permission="user:manage" />}>
+              <Route path="/admin/users" element={<AdminUsers />} />
+            </Route>
 
-          <Route
-            path="/admin/audit"
-            element={<AdminAudit />}
-          />
-        </Route>
+            <Route element={<ProtectedRoute permission="audit:read" />}>
+              <Route path="/admin/audit" element={<AdminAudit />} />
+            </Route>
 
-        {/* FALLBACK */}
+            <Route element={<ProtectedRoute permission="rbac:read" />}>
+              <Route path="/admin/access" element={<AccessMatrix />} />
+            </Route>
 
-        <Route
-          path="*"
-          element={<NotFound />}
-        />
-      </Routes>
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

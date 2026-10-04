@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { param } from "../lib/http";
 import {
   createAssignment,
   acceptAssignment,
@@ -22,7 +23,7 @@ export async function addProgressUpdateController(
       });
     }
 
-    const { assignmentId } = req.params;
+    const assignmentId = param(req, "assignmentId");
     const { note } = req.body;
 
     if (!note || !note.trim()) {
@@ -176,7 +177,7 @@ export async function acceptAssignmentController(
       });
     }
 
-    const { assignmentId } = req.params;
+    const assignmentId = param(req, "assignmentId");
 
     const assignment = await acceptAssignment(
       assignmentId,
@@ -233,7 +234,7 @@ export async function startAssignmentController(
       });
     }
 
-    const { assignmentId } = req.params;
+    const assignmentId = param(req, "assignmentId");
 
     const issue = await startAssignment(
       assignmentId,
@@ -298,7 +299,7 @@ export async function resolveAssignmentController(
       });
     }
 
-    const { assignmentId } = req.params;
+    const assignmentId = param(req, "assignmentId");
     const { note } = req.body;
 
     let resolutionImageUrl: string | undefined;
@@ -397,11 +398,16 @@ export async function getMyAssignmentsController(
 
 // GET ALL ASSIGNMENTS — ADMIN
 export async function getAllAssignmentsController(
-  _req: AuthenticatedRequest,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
-    const assignments = await getAllAssignments();
+    // ?days=N: finished jobs from the last N days (1–365, default 30)
+    const days = Number(req.query.days);
+    const window =
+      Number.isInteger(days) && days >= 1 && days <= 365 ? days : 30;
+
+    const assignments = await getAllAssignments(window);
 
     return res.status(200).json({
       assignments,

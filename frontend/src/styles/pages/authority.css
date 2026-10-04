@@ -1,0 +1,1056 @@
+/* =========================================================
+   OFFICER — Crew Queue (+ Route Map, Officer Scorecard),
+   Case File Job Flow, Patrol Log, and the Cost Ledger
+   component (components/CostLedger.jsx, classes `cost-*`).
+   Shared case pieces (Fix Clock, timeline, pickers, Case File
+   rails) live in citizen.css.
+========================================================= */
+
+/* ---------- Job Flow ---------- */
+
+.jobflow {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+}
+
+.jobflow.is-reopened {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+}
+
+.jobflow-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
+.jobflow-head h2 {
+  font-size: 23px;
+}
+
+.jobflow-text {
+  max-width: 70ch;
+  margin-top: 4px;
+  color: var(--text-2);
+}
+
+.jobflow-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jobflow-step {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.jobflow-step::after {
+  content: "";
+  position: absolute;
+  top: 15px;
+  right: 2px;
+  left: 40px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.jobflow-step:last-child::after {
+  display: none;
+}
+
+.jobflow-step.is-done::after {
+  background: var(--primary);
+}
+
+.jobflow-dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-3);
+}
+
+.jobflow-dot svg {
+  width: 16px;
+  height: 16px;
+}
+
+.jobflow-step.is-done .jobflow-dot {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.jobflow-step.is-current .jobflow-dot {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.jobflow-label {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.jobflow-label strong {
+  font-size: 13.5px;
+}
+
+.jobflow-step:not(.is-done):not(.is-current) .jobflow-label strong {
+  color: var(--text-3);
+}
+
+.jobflow-label small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.jobflow-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.jobflow-work {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.jobflow-work .segmented {
+  justify-self: start;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.jobflow-work .segmented button {
+  flex: none;
+}
+
+.jobflow-form {
+  display: grid;
+  gap: 14px;
+  animation: fade-in 160ms var(--ease);
+}
+
+.jobflow-form .field {
+  margin-bottom: 0;
+}
+
+.jobflow-label-text {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.jobflow-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 13.5px;
+}
+
+.jobflow-note svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 2px;
+  color: var(--warning);
+}
+
+.job-proof {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.job-proof img {
+  width: min(440px, 100%);
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+
+.job-proof figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .jobflow {
+    padding: 18px;
+  }
+
+  .jobflow-steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .jobflow-step {
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 14px;
+  }
+
+  .jobflow-step:last-child {
+    padding-bottom: 0;
+  }
+
+  .jobflow-step::after {
+    top: 34px;
+    right: auto;
+    bottom: 0;
+    left: 15px;
+    width: 2px;
+    height: auto;
+  }
+
+  .jobflow-action button {
+    width: 100%;
+  }
+}
+
+/* ---------- Cost Ledger ---------- */
+
+.cost-ledger {
+  container: cost-ledger / inline-size;
+}
+
+.cost-ledger .section-head {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+.cost-ledger .section-head > div:first-child {
+  flex: 1 1 auto;
+}
+
+.cost-total {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.cost-total span {
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cost-total strong {
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.cost-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.cost-body > .form-error,
+.cost-body > .form-success {
+  margin: 0;
+}
+
+.cost-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-3);
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cost-subtitle span {
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--text-2);
+  letter-spacing: 0;
+}
+
+.cost-breakdown {
+  padding: 14px 14px 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.cost-breakdown .hbar-row:hover,
+.cost-breakdown .hbar-row:focus-visible {
+  background: var(--surface);
+}
+
+.cost-form {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+.cost-form .cost-subtitle {
+  margin-bottom: 4px;
+}
+
+.cost-form-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 150px auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.cost-form-row .field {
+  margin-bottom: 0;
+}
+
+.cost-amount {
+  position: relative;
+}
+
+.cost-amount span {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  color: var(--text-3);
+  font-weight: 700;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.cost-amount input {
+  padding-left: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cost-submit {
+  min-height: 42px;
+}
+
+.cost-list {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  list-style: none;
+}
+
+.cost-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto 36px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.cost-row + .cost-row {
+  border-top: 1px solid var(--border);
+}
+
+.cost-kind-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--kind) 16%, var(--surface));
+  color: var(--text-2);
+  box-shadow: inset 0 -3px 0 var(--kind);
+}
+
+.cost-kind-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.cost-row-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cost-row-main strong {
+  font-size: 14.5px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.cost-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.cost-row-meta > * {
+  white-space: nowrap;
+}
+
+.cost-row-meta > * + *::before {
+  content: "·";
+  margin: 0 6px;
+}
+
+.cost-kind-label {
+  color: var(--text-2);
+  font-weight: 650;
+}
+
+.cost-amount-value {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cost-delete {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  color: var(--text-3);
+}
+
+.cost-delete:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.cost-delete svg {
+  width: 17px;
+  height: 17px;
+}
+
+.cost-delete-spacer {
+  width: 36px;
+}
+
+.cost-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.cost-empty svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--text-3);
+}
+
+.cost-empty p {
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.cost-blocked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.cost-blocked svg {
+  width: 16px;
+  height: 16px;
+}
+
+.cost-error {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.cost-skeleton {
+  display: grid;
+  gap: 10px;
+}
+
+.cost-skeleton span {
+  height: 48px;
+}
+
+/* The ledger sizes itself to its own width (container queries), so it
+   works in a wide main column, a narrow rail or an admin page alike. */
+@container cost-ledger (max-width: 720px) {
+  .cost-form-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cost-field-desc,
+  .cost-submit {
+    grid-column: 1 / -1;
+  }
+}
+
+@container cost-ledger (max-width: 520px) {
+  .cost-ledger .section-head {
+    flex-wrap: wrap;
+  }
+
+  .cost-ledger .section-head .section-actions {
+    width: 100%;
+  }
+
+  .cost-total {
+    width: 100%;
+    grid-auto-flow: column;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+@container cost-ledger (max-width: 440px) {
+  .cost-form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cost-row {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 6px 10px;
+  }
+
+  .cost-kind-icon {
+    width: 32px;
+    height: 32px;
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+
+  .cost-row-main {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+  }
+
+  .cost-amount-value {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  .cost-delete,
+  .cost-delete-spacer {
+    grid-row: 2;
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  .cost-delete-spacer {
+    display: none;
+  }
+}
+
+/* ---------- Crew Queue ---------- */
+
+.cq-layout {
+  align-items: start;
+}
+
+.cq-queue {
+  container: crew-queue / inline-size;
+}
+
+.cq-queue .section-head {
+  margin-bottom: 12px;
+}
+
+.cq-filters {
+  margin-bottom: 14px;
+}
+
+.cq-filters .segmented,
+.cq-queue .section-actions .segmented {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.cq-filters .segmented button {
+  flex: none;
+}
+
+.cq-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-3) 14%, transparent);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  text-align: center;
+}
+
+.segmented button.is-active .cq-count {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.cq-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cq-job {
+  --rail: var(--border);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px 14px 22px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: inherit;
+  transition:
+    border-color var(--t-fast),
+    box-shadow var(--t-fast);
+}
+
+.cq-job::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--rail);
+}
+
+.cq-job:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  text-decoration: none;
+}
+
+.cq-job:hover .cq-job-title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cq-job-ok {
+  --rail: var(--border-strong);
+}
+
+.cq-job-urgent {
+  --rail: var(--status-warn);
+}
+
+.cq-job-breached {
+  --rail: var(--status-critical);
+}
+
+.cq-job-done {
+  --rail: var(--status-good);
+}
+
+.cq-job.is-done {
+  background: var(--surface-2);
+}
+
+.cq-job.is-done .cq-job-title {
+  color: var(--text-2);
+}
+
+.cq-job-main {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.cq-job-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cq-job-title {
+  font-size: 15.5px;
+  line-height: 1.3;
+}
+
+.cq-stage {
+  color: var(--text-2);
+  font-weight: 650;
+}
+
+.cq-job-clock {
+  display: grid;
+  justify-items: end;
+  min-width: 84px;
+  text-align: right;
+}
+
+.cq-clock-big {
+  color: var(--text);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.cq-job-urgent .cq-clock-big {
+  color: var(--warning);
+}
+
+.cq-job-breached .cq-clock-big {
+  color: var(--danger);
+}
+
+.cq-job-done .cq-clock-big {
+  color: var(--success);
+}
+
+.cq-clock-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cq-clock-sub svg {
+  width: 13px;
+  height: 13px;
+}
+
+.cq-job-arrow {
+  width: 18px;
+  height: 18px;
+  color: var(--text-3);
+}
+
+/* Route Map */
+
+.cq-route {
+  display: grid;
+  gap: 16px;
+}
+
+.cq-map .issue-map {
+  height: clamp(320px, 52vh, 480px);
+}
+
+.cq-stops {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cq-stops li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.cq-stops .fix-chip {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.cq-stop-num {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--navy-800);
+  color: var(--yellow-400);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+:root[data-theme="dark"] .cq-stop-num {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.cq-stop-link {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: inherit;
+}
+
+.cq-stop-link strong {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.cq-stop-link span {
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+/* Officer Scorecard */
+
+.cq-side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.cq-score {
+  display: grid;
+  gap: 16px;
+}
+
+.cq-score .section-head {
+  margin: 0;
+}
+
+.cq-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cq-figures > div {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.cq-figures strong {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.cq-figures small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.cq-stars {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.cq-stars svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+
+.cq-stars svg.is-on {
+  fill: var(--accent);
+  color: var(--accent-text);
+}
+
+@media (max-width: 560px) {
+  .cq-queue {
+    padding: 16px;
+  }
+}
+
+/* Job cards follow the width of the queue card, not the viewport. */
+@container crew-queue (max-width: 560px) {
+  .cq-job {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px 12px 12px 18px;
+  }
+
+  .cq-job-arrow {
+    display: none;
+  }
+
+  .cq-job-clock {
+    grid-auto-flow: column;
+    justify-content: start;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    text-align: left;
+  }
+
+  .cq-clock-big {
+    font-size: 17px;
+  }
+}
+
+/* ---------- Patrol Log (layout shared with Snap & Send) ---------- */
+
+.pl-fieldset {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pl-fieldset legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.pl-cats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.pl-sevs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.pl-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast),
+    box-shadow var(--t-fast);
+}
+
+.pl-option:hover {
+  border-color: var(--text-3);
+}
+
+.pl-option.is-on {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--primary);
+  color: var(--text);
+}
+
+.pl-option:has(.pl-radio:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+
+.pl-option > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--text-3);
+}
+
+.pl-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pl-sev {
+  align-items: flex-start;
+}
+
+.pl-sev-swatch {
+  width: 8px;
+  height: 34px;
+  flex: none;
+  border-radius: 3px;
+  background: var(--sev);
+}
+
+.pl-sev-text {
+  display: grid;
+  gap: 1px;
+}
+
+.pl-sev-text strong {
+  font-size: 14px;
+}
+
+.pl-sev-text small {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cq-more {
+  margin-top: 14px;
+}

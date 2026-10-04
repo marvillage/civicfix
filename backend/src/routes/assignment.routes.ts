@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware";
-import { authorizeRoles } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/role.middleware";
 import upload from "../middleware/upload.middleware";
 import {
   createAssignmentController,
@@ -18,7 +18,7 @@ const router = Router();
 router.post(
   "/",
   authenticate,
-  authorizeRoles("AUTHORITY", "ADMIN"),
+  requirePermission("assignment:dispatch"),
   createAssignmentController
 );
 
@@ -26,7 +26,7 @@ router.post(
 router.get(
   "/all",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("assignment:read:all"),
   getAllAssignmentsController
 );
 
@@ -34,7 +34,7 @@ router.get(
 router.get(
   "/my",
   authenticate,
-  authorizeRoles("AUTHORITY", "ADMIN"),
+  requirePermission("assignment:work"),
   getMyAssignmentsController
 );
 
@@ -42,7 +42,7 @@ router.get(
 router.patch(
   "/:assignmentId/accept",
   authenticate,
-  authorizeRoles("AUTHORITY", "ADMIN"),
+  requirePermission("assignment:work"),
   acceptAssignmentController
 );
 
@@ -50,7 +50,7 @@ router.patch(
 router.patch(
   "/:assignmentId/start",
   authenticate,
-  authorizeRoles("AUTHORITY", "ADMIN"),
+  requirePermission("assignment:work"),
   startAssignmentController
 );
 
@@ -58,7 +58,7 @@ router.patch(
 router.post(
   "/:assignmentId/progress",
   authenticate,
-  authorizeRoles("AUTHORITY", "ADMIN"),
+  requirePermission("assignment:work"),
   upload.single("photo"),
   addProgressUpdateController
 );
@@ -67,7 +67,7 @@ router.post(
 router.patch(
   "/:assignmentId/resolve",
   authenticate,
-  authorizeRoles("AUTHORITY", "ADMIN"),
+  requirePermission("assignment:work"),
   upload.single("proof"),
   resolveAssignmentController
 );

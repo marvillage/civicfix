@@ -90,7 +90,7 @@ export async function changeUserRole(
     throw new Error("USER_NOT_FOUND");
   }
 
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: userId },
     data: {
       role: role as any,
@@ -102,6 +102,9 @@ export async function changeUserRole(
       role: true,
     },
   });
+
+  // The previous role goes into the audit trail.
+  return { user: updated, previousRole: user.role };
 }
 
 interface CreateAuthorityData {

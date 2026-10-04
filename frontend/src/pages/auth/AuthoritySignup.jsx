@@ -1,6 +1,29 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  ArrowRight,
+  ClipboardList,
+  Gauge,
+  Route,
+  Send,
+  ShieldCheck,
+  Timer,
+} from "lucide-react";
 import api from "../../api/axios";
+import { BRAND, FEATURES } from "../../brand";
+import AuthLayout, { PasswordField } from "./AuthLayout";
+
+const ART = {
+  art: "/images/control-room.png",
+  artPosition: "30% center",
+  eyebrow: `${BRAND.name} for officers`,
+  points: [
+    { icon: ClipboardList, label: `${FEATURES.crewQueue}, sorted by urgency` },
+    { icon: Route, label: `${FEATURES.routeMap} for the day's jobs` },
+    { icon: Timer, label: `Live ${FEATURES.fixClock} countdowns` },
+    { icon: Gauge, label: `Your ${FEATURES.scorecard}` },
+  ],
+};
 
 export default function AuthoritySignup() {
   const [form, setForm] = useState({
@@ -17,26 +40,19 @@ export default function AuthoritySignup() {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(null);
 
   useEffect(() => {
     api
       .get("/organization/public-departments")
-      .then((response) =>
-        setDepartments(
-          response.data.departments || []
-        )
-      )
+      .then((response) => setDepartments(response.data.departments || []))
       .catch(() => {});
   }, []);
 
   function handleChange(event) {
     const { name, value } = event.target;
 
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
+    setForm((previous) => ({ ...previous, [name]: value }));
   }
 
   async function handleSubmit(event) {
@@ -45,28 +61,28 @@ export default function AuthoritySignup() {
     setError("");
 
     if (form.password !== form.confirmPassword) {
-      setError("Passwords do not match.");
+      setError("The two passwords don't match.");
       return;
     }
 
     setLoading(true);
 
     try {
-      await api.post("/auth/register/authority", {
-        name: form.name,
-        email: form.email,
+      const response = await api.post("/auth/register/authority", {
+        name: form.name.trim(),
+        email: form.email.trim(),
         password: form.password,
-        employeeId: form.employeeId,
-        designation: form.designation,
-        phone: form.phone,
+        employeeId: form.employeeId.trim(),
+        designation: form.designation.trim(),
+        phone: form.phone.trim(),
         departmentId: form.departmentId || undefined,
       });
 
-      setSubmitted(true);
-    } catch (error) {
+      setSubmitted({ message: response.data?.message || "" });
+    } catch (submitError) {
       setError(
-        error.response?.data?.message ||
-          "Unable to submit the registration."
+        submitError.response?.data?.message ||
+          "Couldn't send your registration. Please try again."
       );
     } finally {
       setLoading(false);
@@ -75,292 +91,225 @@ export default function AuthoritySignup() {
 
   if (submitted) {
     return (
-      <div className="auth-page">
-        <aside className="auth-art auth-art-authority">
-          <div className="auth-art-caption">
-            <p className="auth-art-eyebrow">
-              CIVICFIX FOR STAFF
-            </p>
+      <AuthLayout
+        {...ART}
+        title="Request received."
+        text="Officer accounts are checked by a person before they go live."
+      >
+        <div className="auth-done">
+          <svg className="success-check" viewBox="0 0 56 56" aria-hidden="true">
+            <circle className="circle" cx="28" cy="28" r="26" />
+            <path className="mark" d="M16 29.5l8 8 16-17" />
+          </svg>
 
-            <h2>Request received.</h2>
-
+          <div className="auth-head">
+            <p className="eyebrow">Officer sign-up</p>
+            <h1>Registration sent</h1>
             <p>
-              Municipal accounts are verified before
-              they go live.
+              An administrator will check your government ID and approve the
+              account. Logging in before then shows a "pending approval"
+              message.
             </p>
           </div>
-        </aside>
 
-        <div className="auth-panel">
-          <div className="auth-card">
-            <svg
-              className="success-check"
-              viewBox="0 0 56 56"
-              aria-hidden="true"
-              style={{ margin: "0 auto 16px" }}
-            >
-              <circle
-                className="circle"
-                cx="28"
-                cy="28"
-                r="26"
-              />
-              <path
-                className="mark"
-                d="M16 29.5l8 8 16-17"
-              />
-            </svg>
+          {submitted.message && (
+            <p className="form-info" role="status">
+              {submitted.message}
+            </p>
+          )}
 
-            <div className="auth-header">
-              <h1>Registration submitted</h1>
+          <ol className="auth-next">
+            <li>An admin checks your employee ID and department.</li>
+            <li>You get an email as soon as you're approved.</li>
+            <li>
+              Log in and your {FEATURES.crewQueue} is waiting.
+            </li>
+          </ol>
 
-              <p>
-                An administrator will verify your
-                government ID and approve the
-                account. You will be able to sign in
-                once it is approved — trying earlier
-                will show a "pending approval"
-                message.
-              </p>
-            </div>
-
-            <Link to="/login">
-              <button
-                type="button"
-                style={{ width: "100%" }}
-              >
-                Go to sign in
-              </button>
-            </Link>
-          </div>
+          <Link to="/login" className="btn btn-accent btn-lg btn-block">
+            Go to log in
+            <ArrowRight aria-hidden="true" />
+          </Link>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="auth-page">
-      <aside className="auth-art auth-art-authority">
-        <div className="auth-art-caption">
-          <p className="auth-art-eyebrow">
-            CIVICFIX FOR STAFF
-          </p>
-
-          <h2>
-            The control room for the people who do
-            the work.
-          </h2>
-
-          <p>
-            Municipal officers get an urgency-sorted
-            queue with live SLA countdowns, field
-            survey mode, progress updates and a
-            performance scorecard.
-          </p>
-        </div>
-      </aside>
-
-      <div className="auth-panel">
-        <div className="auth-card auth-card-wide">
-          <Link to="/" className="auth-brand">
-            <img
-              className="brand-icon"
-              src="/images/logo-icon.png"
-              alt=""
-            />
-            CivicFix
-          </Link>
-
-          <div className="auth-header">
-            <h1>Authority registration</h1>
-
-            <p>
-              For municipal staff only. Your
-              government ID is verified by an admin
-              before the account is activated.
-            </p>
-          </div>
-
-          <div className="verify-notice">
-            <strong>Verification required</strong>
-            <span>
-              Accounts stay pending until an
-              administrator approves them. Citizens
-              should{" "}
-              <Link to="/register">
-                register here
-              </Link>{" "}
-              instead.
-            </span>
-          </div>
-
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="name">
-                Full name *
-              </label>
-
-              <input
-                id="name"
-                name="name"
-                type="text"
-                value={form.name}
-                onChange={handleChange}
-                placeholder="As printed on your ID card"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="email">
-                Official email *
-              </label>
-
-              <input
-                id="email"
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="officer@municipality.gov.in"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="employeeId">
-                Government / employee ID *
-              </label>
-
-              <input
-                id="employeeId"
-                name="employeeId"
-                type="text"
-                value={form.employeeId}
-                onChange={handleChange}
-                placeholder="e.g. MCD-2026-0147"
-                required
-              />
-            </div>
-
-            <div className="location-fields">
-              <div className="form-group">
-                <label htmlFor="designation">
-                  Designation
-                </label>
-
-                <input
-                  id="designation"
-                  name="designation"
-                  type="text"
-                  value={form.designation}
-                  onChange={handleChange}
-                  placeholder="e.g. Junior Engineer"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="phone">
-                  Work phone
-                </label>
-
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  value={form.phone}
-                  onChange={handleChange}
-                  placeholder="+91 …"
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="departmentId">
-                Department
-              </label>
-
-              <select
-                id="departmentId"
-                name="departmentId"
-                value={form.departmentId}
-                onChange={handleChange}
-              >
-                <option value="">
-                  Select your department
-                </option>
-
-                {departments.map((department) => (
-                  <option
-                    key={department.id}
-                    value={department.id}
-                  >
-                    {department.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="location-fields">
-              <div className="form-group">
-                <label htmlFor="password">
-                  Password *
-                </label>
-
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={form.password}
-                  onChange={handleChange}
-                  placeholder="Min 8 characters"
-                  minLength={8}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="confirmPassword">
-                  Confirm password *
-                </label>
-
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  value={form.confirmPassword}
-                  onChange={handleChange}
-                  minLength={8}
-                  required
-                />
-              </div>
-            </div>
-
-            {error && (
-              <div className="form-error">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-            >
-              {loading && (
-                <span className="spinner" />
-              )}
-              {loading
-                ? "Submitting…"
-                : "Submit for verification"}
-            </button>
-          </form>
-
-          <p className="auth-switch">
-            Already approved?{" "}
-            <Link to="/login">Sign in</Link>
-          </p>
-        </div>
+    <AuthLayout
+      {...ART}
+      title="A control room for the people who do the work."
+      text="Officers get an urgency-sorted queue, live deadlines, field reporting and a scorecard that shows the work they actually did."
+      wide
+    >
+      <div className="auth-head">
+        <p className="eyebrow">Officer sign-up</p>
+        <h1>Join as a municipal officer</h1>
+        <p>For municipal staff only. Residents should create a regular account.</p>
       </div>
-    </div>
+
+      <div className="auth-notice" role="note">
+        <ShieldCheck aria-hidden="true" />
+        <span>
+          <strong>Verified before first login.</strong> An admin checks your
+          government ID first. Not staff?{" "}
+          <Link to="/register" className="text-link">
+            Create a resident account
+          </Link>
+          .
+        </span>
+      </div>
+
+      <form className="auth-form" onSubmit={handleSubmit}>
+        <div className="form-row">
+          <div className="field">
+            <label htmlFor="officer-name">Full name</label>
+            <input
+              id="officer-name"
+              name="name"
+              type="text"
+              value={form.name}
+              onChange={handleChange}
+              placeholder="As printed on your ID card"
+              autoComplete="name"
+              required
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="officer-email">Official email</label>
+            <input
+              id="officer-email"
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={handleChange}
+              placeholder="officer@municipality.gov.in"
+              autoComplete="email"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="field">
+            <label htmlFor="officer-id">Government or employee ID</label>
+            <input
+              id="officer-id"
+              name="employeeId"
+              type="text"
+              value={form.employeeId}
+              onChange={handleChange}
+              placeholder="e.g. MCD-2026-0147"
+              autoComplete="off"
+              required
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="officer-designation">
+              Designation <span className="auth-optional">(optional)</span>
+            </label>
+            <input
+              id="officer-designation"
+              name="designation"
+              type="text"
+              value={form.designation}
+              onChange={handleChange}
+              placeholder="e.g. Junior Engineer"
+              autoComplete="organization-title"
+            />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="field">
+            <label htmlFor="officer-phone">
+              Work phone <span className="auth-optional">(optional)</span>
+            </label>
+            <input
+              id="officer-phone"
+              name="phone"
+              type="tel"
+              value={form.phone}
+              onChange={handleChange}
+              placeholder="+91 …"
+              autoComplete="tel"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="officer-department">
+              Department <span className="auth-optional">(optional)</span>
+            </label>
+            <select
+              id="officer-department"
+              name="departmentId"
+              value={form.departmentId}
+              onChange={handleChange}
+            >
+              <option value="">Select your department</option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="form-row">
+          <PasswordField
+            id="officer-password"
+            label="Password"
+            value={form.password}
+            onChange={handleChange}
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            minLength={8}
+            required
+          />
+
+          <PasswordField
+            id="officer-confirm"
+            name="confirmPassword"
+            label="Confirm password"
+            value={form.confirmPassword}
+            onChange={handleChange}
+            autoComplete="new-password"
+            minLength={8}
+            required
+          />
+        </div>
+
+        {error && (
+          <div className="form-error" role="alert">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          className="btn-accent btn-lg btn-block"
+          disabled={loading}
+        >
+          {loading ? (
+            <span className="spinner" aria-hidden="true" />
+          ) : (
+            <Send aria-hidden="true" />
+          )}
+          {loading ? "Sending…" : "Submit for verification"}
+        </button>
+      </form>
+
+      <div className="auth-alt">
+        <p>
+          Already approved?{" "}
+          <Link to="/login" className="text-link">
+            Log in
+          </Link>
+        </p>
+      </div>
+    </AuthLayout>
   );
 }

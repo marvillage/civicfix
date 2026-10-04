@@ -2,7 +2,7 @@ import { Router } from "express";
 
 import { authenticate } from "../middleware/auth.middleware";
 
-import { authorizeRoles } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/role.middleware";
 
 import {
   createDepartmentController,
@@ -23,14 +23,14 @@ const router = Router();
 router.post(
   "/departments",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("org:manage"),
   createDepartmentController
 );
 
 router.get(
   "/departments",
   authenticate,
-  authorizeRoles("ADMIN", "AUTHORITY"),
+  requirePermission("org:read"),
   getDepartmentsController
 );
 
@@ -44,28 +44,35 @@ router.get(
 // WARDS
 // ─────────────────────────────────────────────
 
+// Public: ward pickers on City Radar, bulletins and votes
+router.get(
+  "/public-wards",
+  getWardsController
+);
+
 router.post(
   "/wards",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("org:manage"),
   createWardController
 );
 
 router.get(
   "/wards",
   authenticate,
-  authorizeRoles("ADMIN", "AUTHORITY"),
+  requirePermission("org:read"),
   getWardsController
 );
 
 // ─────────────────────────────────────────────
 // AUTHORITIES
+// The officer picker on the assign screen.
 // ─────────────────────────────────────────────
 
 router.get(
   "/authorities",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("issue:assign"),
   getAuthoritiesController
 );
 
@@ -76,14 +83,14 @@ router.get(
 router.get(
   "/rules",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("org:manage"),
   getCategoryRulesController
 );
 
 router.put(
   "/rules",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("org:manage"),
   setCategoryRuleController
 );
 

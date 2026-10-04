@@ -1,90 +1,141 @@
-# CivicFix — Manual Testing Guide
+# Fixity — Testing Guide
 
-Everything below works against the seeded demo database. Run `npm run seed` inside `backend/` to reset to this exact state at any time.
+Two layers: automated tests in the backend, and a manual walkthrough per role against the demo city.
 
-## Demo accounts
-
-| Role | Email | Password | What they have |
-|---|---|---|---|
-| Citizen | `citizen@civicfix.test` | `Citizen@123` | 65 points, 5 reports across statuses, one awaiting verification, a private chat thread, unread notifications |
-| Citizen | `priya@civicfix.test` | `Citizen@123` | 120 points, top of the leaderboard, reported the emergency |
-| Citizen | `rahul@civicfix.test` | `Citizen@123` | 45 points |
-| Citizen | `aisha@civicfix.test` | `Citizen@123` | 25 points |
-| Authority | `authority@civicfix.test` | `Authority@123` | Sunil Kumar, Junior Engineer, Roads — 7 assignments in every workflow state |
-| Authority | `engineer@civicfix.test` | `Authority@123` | Meera Joshi, Assistant Engineer, Water — has the live emergency |
-| Admin | `admin@civicfix.test` | `Admin@123` | Full analytics, users, audit log, chronic list |
-
-On the login page there are **three one-click buttons** that fill these credentials for you.
-
-## Seeded data at a glance
-
-16 issues covering every status: REPORTED, AI_VERIFIED, ASSIGNED, ACKNOWLEDGED, IN_PROGRESS (including a live emergency), RESOLVED (2 awaiting verification), CLOSED (2 with star ratings), SLA_BREACHED, ESCALATED (2 escalation levels), REOPENED (chronic, reopened 3×), DUPLICATE, plus an anonymous report. Also 4 departments, 4 wards, 5 auto-assignment rules, 29 upvotes, 8 comments, a 4-message private thread, 10 notifications, and 9 SLAs (some active, some breached).
-
----
-
-## 1. Public pages (no login)
-
-1. Open `http://localhost:5173` — cinematic homepage, live stat counters animate up from zero.
-2. **Browse issues** → try the search box (`pothole`), the category/status/ward filters, and each sort option.
-3. Switch **List → Map → Heat**. Map pins are colored by severity; Heat shows hotspot density.
-4. Click **📍 Issues near me** and allow location — the feed becomes distance-sorted with a radius picker.
-5. Open any issue: photo gallery (click a thumbnail for the lightbox), voice note player on the pothole issue, SLA "expected fix by" bar, status timeline with progress photos, comments, and **Copy link / WhatsApp** share buttons.
-6. **Transparency** (`/stats`) — city totals, category chart, and ward report cards graded A–F.
-7. **Report anonymously** (`/report`) — submit with photos, a voice note, and the emergency checkbox. No login needed.
-8. Visit a nonsense URL like `/nope` to see the 404 pigeon page.
-
-## 2. Citizen
-
-Log in as `citizen@civicfix.test`.
-
-1. **Dashboard** — civic points chip, impact tiles, notifications (3 unread), recent complaints, earned badges, leaderboard (you are 2nd behind Priya).
-2. **Report an Issue** — attach up to 5 photos, record a voice note, tap *Use My Location*. Watch the address auto-fill and the **"Already reported near this spot?"** panel appear with an Upvote button. Tick the 🚨 emergency box to see that flow. On submit you get the animated success tick.
-3. **My Complaints** → open *Cracked footpath slabs near the vegetable market* (status Resolved):
-   - See the **before/after photo comparison**
-   - Give a **1–5 star rating** and confirm — the issue closes and your points jump
-   - Or reject it to reopen (adds to the reopen count)
-4. Open *Road surface broken outside the community hall* (In Progress) — read the **private thread** with Sunil Kumar and reply, then post a public comment.
-5. Find a REPORTED complaint of yours and use **Withdraw report** (only available before work starts).
-6. Click your name in the header → **Profile**: change your avatar, edit name/bio/ward/phone, view badges and impact, change your password.
-7. Toggle **dark mode** with the ☾ button (bottom-right) — it persists across reloads.
-
-## 3. Authority
-
-Log in as `authority@civicfix.test` (or `engineer@civicfix.test` for the emergency).
-
-1. **Dashboard** switches to the dark *Night Watch* theme automatically.
-2. Scorecard tiles: avg resolution time, resolved this month, SLA hit rate, citizen ★ rating.
-3. The queue is **sorted by urgency** — emergencies first, then breached SLAs, then nearest deadline. Each card shows a live ⏱ countdown (amber under 4 hours, red when breached).
-4. Filter with the stat cards (Total / Pending / Active / Resolved) and toggle **List → Map** to see your assignments geographically.
-5. Open the ASSIGNED issue (*Water pipeline leaking*, as Meera) → **Accept** → **Start Work**.
-6. On an IN_PROGRESS issue: **post a progress update** with a note and photo (appears on the public timeline and notifies watchers), then **Resolve** with a resolution note and a **proof photo**.
-7. **+ Log field issue** — file a report yourself; it's created pre-acknowledged and assigned to you.
-8. Use the private thread on any assigned issue to message the reporter.
-
-## 4. Admin
-
-Log in as `admin@civicfix.test`.
-
-1. **Dashboard**: stat tiles, SLA compliance %, average resolution time, 6-month trend column chart, bar charts by category / ward / severity, and the **"Needs a rethink" chronic issues** list.
-2. **⬇ Export issues (CSV)** downloads the full dataset.
-3. **Manage Issues** — assign or reassign an authority; use **Mark Duplicate** (paste another issue's ID) to merge upvotes.
-4. **Manage Assignments** — the full assignment table with SLA badges and status filters.
-5. **Departments & Wards** — create one, then set an **auto-assignment rule** (category → department). File a new report in that category and watch it route automatically.
-6. **SLA Management** — set a deadline on an issue; the background job checks every 60 seconds and will breach/escalate it automatically.
-7. **Users & Roles** — promote/demote anyone, and **create an authority account** with government ID, designation, phone, and department. The temporary password is shown exactly once with a copy button. Log out and sign in with it to confirm.
-8. **Audit Log** — every status change across the platform, paginated.
-
-## 5. Security checks worth trying
-
-- Log in as a citizen and manually visit `/admin` → redirected away.
-- Log in as an authority and visit `/admin/users` → redirected away.
-- Open a private thread on an issue you are not part of → the thread does not appear.
-- Register a new account → it is always a CITIZEN; there is no way to self-assign a staff role.
-- Edit your stored token in localStorage to garbage and refresh → the app clears it and returns you to login.
-
-## Resetting
+## Automated tests
 
 ```bash
 cd backend
-npm run seed     # wipes and rebuilds the entire demo dataset
+npm run typecheck                    # tsc, zero errors expected
+npm test                             # unit tests (integration suite skipped)
+TEST_DATABASE_URL=postgresql://… npm test   # + integration tests against a scratch database
 ```
+
+`TEST_DATABASE_URL` must point at a migrated, disposable database. Every row the tests create is cleaned up.
+
+| File | What it proves |
+|---|---|
+| `tests/permissions.test.ts` | The role set that reaches every gated route is pinned, so a matrix edit can't silently widen or narrow access. Citizens never hold admin-only permissions; admins hold everything officers hold. |
+| `tests/geo.test.ts` | Haversine distances against known points, circle containment, bounding box ⊇ circle. |
+| `tests/bulletin-rules.test.ts` | Active / upcoming / past windows; the Prisma `where` filters select exactly what the JS rules accept. |
+| `tests/poll-rules.test.ts` | When poll results are visible (closed, voted, or staff). |
+| `tests/pulse.test.ts` | City Pulse helpers: IST day/week/month buckets, median, A–F grades, backlog series, TTL cache eviction. |
+| `tests/api.integration.test.ts` | Over real HTTP on a real Postgres: 401 without a token; citizen → 403 on publishing; officers' bulletins pinned to their department; a pin attempt by an officer → 403; watch zones owner-only (404) and capped at 5 (409); zone alerts reach owners but not the reporter; two simultaneous votes → exactly one 200 and one 409; voting on a closed poll → 400; a **demoted user's old token gets 403 immediately**; invalid input → 400 `VALIDATION_FAILED`; audit rows recorded with IP. |
+
+Frontend: `cd frontend && npm run lint && npm run build`.
+
+## Demo accounts
+
+Seed the demo city first (`cd backend && npm run seed:demo`, about 3 s, re-runnable). It has 8 wards, about 800
+cases over 12 months, and costs, budgets, bulletins, votes, drives and watch zones.
+
+| Role | Email | Password | Notes |
+|---|---|---|---|
+| Citizen | `citizen@fixity.test` | `Citizen@123` | Kushagra Srivastava, Gandhi Nagar. Cases in every state, one fix waiting for Sign-Off, 2 Watch Zones, a pending drive proposal |
+| Citizen | `priya@fixity.test`, `rahul@fixity.test`, `aisha@fixity.test` | `Citizen@123` | About 70 more neighbours exist, e.g. `sameer.khan@fixity.test` |
+| Officer | `authority@fixity.test` | `Authority@123` | Sunil Kumar, Roads. Open jobs, a year of history, a Cost Ledger |
+| Officer | `engineer@fixity.test` | `Authority@123` | Meera Joshi, Water. Has the live Red Alert |
+| Admin | `admin@fixity.test` | `Admin@123` | Everything |
+
+No backend handy? `cd frontend && VITE_DEMO=1 npm run dev`: the login page has one-click Citizen, Officer and Admin
+buttons, and the whole app runs on recorded data.
+
+---
+
+## 1. Signed out
+
+1. `/`: landing page with live numbers, the four-step journey, the six new features and ward grades.
+   Toggle the theme (moon/sun) and reload: the choice sticks, with no flash.
+2. **City Radar** (`/issues`):
+   - Search, category chips, status, ward and sort filters (all kept in the URL).
+   - **List / Map / Hotspots** views, and **Near me** with a radius ring.
+   - "Load more" pages through the cases.
+3. Open a **Case File**:
+   - Gallery lightbox (arrow keys, Escape), Fix Clock bar, timeline with progress photos, crew steps, share
+     buttons, mini map.
+   - **Back it** sends you to log in and back again.
+4. **City Pulse** (`/pulse`):
+   - Switch 30 days / 90 days / 12 months, pick a ward, then a category. Every chart follows the filters.
+   - Hover the line chart, or focus it and use the arrow keys.
+   - Tap a ward bubble, then **Focus the Pulse on …**.
+   - Use the table icon on any chart.
+5. **Quick Drop** (`/report`): photos, voice note, GPS, Red Alert. Echo Check suggests nearby cases to back
+   instead.
+6. **Bulletins**, **Ward Vote** and **Drives** are all readable without an account; actions say "Log in to …".
+7. Visit `/nope` for the 404 page.
+
+## 2. Citizen
+
+1. **Home**:
+   - The waiting Sign-Off banner, Your Footprint tiles, Civic Cred badges and leaderboard.
+   - "Around your ward": bulletins, votes, drives, Watch Zones.
+2. **Snap & Send**: up to 5 photos, voice note, location. Echo Check offers **Back It** on nearby cases. Tick
+   **Red Alert** to see the emergency flow.
+3. **My Cases** → the Resolved case → **Sign-Off**: compare before and after, rate 1–5 stars, or reopen with a
+   reason.
+4. **Direct Line** on an in-progress case; **Street Talk** on any case.
+5. **Watch Zones**:
+   - Add a zone by clicking the map or using your location, set the radius and pick categories.
+   - Select a zone to list the open cases inside it.
+   - A 6th zone is refused.
+   - Then file a report inside a zone with another citizen account: the zone owner gets an alert in the bell.
+6. **Ward Vote**: cast a vote. The results appear and the vote is locked; a second vote is refused.
+7. **Cleanup Drives**: RSVP to an upcoming drive, then cancel. **Propose a drive**: it shows "Sent for review" and
+   appears under **Mine** as Proposed.
+8. **Profile**: edit details, change password, pick Light / Dark / System.
+
+## 3. Officer
+
+1. **Crew Queue**:
+   - Open jobs, most urgent first, with live Fix Clock countdowns (amber under 4 h, red when breached).
+   - Filters: Open / To accept / Active / Resolved, with "Show more".
+   - Switch to **Route Map**, and check the **Officer Scorecard**.
+2. Open a job and run the **Job Flow**:
+   - **Accept**, then **Start work**.
+   - Post a **Site Update** with a photo.
+   - **Resolve** with a proof photo.
+3. **Cost Ledger** on the job:
+   - Log material, labour or contractor spend, and delete your own entry within 24 h.
+   - The total rolls up into **Budgets** (`/budgets`, your department only, no edit controls).
+4. **Patrol Log**: file a case you spotted; it arrives already acknowledged and assigned to you.
+5. **Ward Bulletins**: publish one. Your department is filled in, and there is no pin option.
+
+## 4. Admin
+
+1. **Command Deck**:
+   - Tiles, the Fix Clock meter, monthly reports, and category / ward / severity / pipeline charts (each with a
+     table view).
+   - Repeat Offenders.
+   - **Data Export** CSV.
+2. **Case Desk**:
+   - Open / Unassigned / Late come from the open set; **Closed** and **All** page from the server ("50 of 754",
+     Load more).
+   - Assign, change status with a note, open a case's Cost Ledger, merge a duplicate with the search picker.
+3. **Dispatch**: every open job plus the last 30 days, workload per officer, and jobs waiting longest to be
+   accepted.
+4. **Fix Clock**: set a deadline with a preset and a live preview; **Run breach check**.
+5. **Org & Routing**: add a department or ward, and route a category to a department.
+6. **Access Control**:
+   - Promote or demote with a confirm step (never yourself), approve officer applications.
+   - Create an officer: the one-time password is shown once, with a copy button.
+7. **Permission Matrix**: every permission × role, grouped and searchable.
+8. **Paper Trail**: the **Case timeline** and **Admin actions** tabs (filter by kind, Load more).
+9. **Budgets**:
+   - Edit a department's monthly budget inline.
+   - Rows turn amber at 85% and red over 100%.
+   - Six months of spend against budget per department.
+10. **Ward Vote**: open a vote with options linked to cases, then **Close now**. **Drives → Pending review**:
+    approve or reject with a note.
+
+## 5. RBAC and security checks
+
+- As a citizen, open `/admin` or `/budgets`: you're sent back to your home. Call `GET /api/users` with the citizen
+  token: 403 with `missing: ["user:manage"]`.
+- As an officer, open `/admin/users`: redirected. `PUT /api/budgets` returns 403.
+- **Instant revocation**: log in as an officer in one tab; as admin, demote them to Citizen. Their next click gets
+  403 or 401 with no wait for token expiry.
+- Read another citizen's watch zone (`GET /api/watch-zones/<their id>/issues`): 404.
+- Send `GET /api/issues/admin/all?view=bogus` as admin: 400 `VALIDATION_FAILED` with field details.
+- Hammer `POST /api/auth/login`: 429 after 30 tries in 15 minutes.
+- Responses carry `X-Request-Id`, `Content-Security-Policy` and `X-Content-Type-Options` headers.
+- Corrupt the stored token in localStorage and reload: the app clears it and returns to login.

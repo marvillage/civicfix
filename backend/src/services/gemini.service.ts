@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { BRAND } from "../config/brand";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -139,7 +140,7 @@ export async function analyzeCivicIssue(
     imageBuffer.toString("base64");
 
   const prompt = `
-You are CivicFix AI, an AI system that analyzes civic complaints.
+You are ${BRAND.name} AI, an AI system that analyzes civic complaints.
 
 Analyze the provided image and optional citizen description.
 

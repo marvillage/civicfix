@@ -1,7 +1,8 @@
 import axios from "axios";
+import { clearToken, getToken } from "../lib/session";
 
 // Set VITE_API_URL in the hosting provider, e.g.
-// https://civicfix-api.onrender.com  (no trailing slash)
+// https://fixity-api.onrender.com  (no trailing slash)
 export const API_ORIGIN =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5000";
@@ -44,7 +45,7 @@ api.interceptors.response.use(
       url.includes("/auth/register");
 
     if (status === 401 && !isAuthAttempt) {
-      localStorage.removeItem("civicfix_token");
+      clearToken();
 
       if (
         window.location.pathname !== "/login"
@@ -59,9 +60,7 @@ api.interceptors.response.use(
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem(
-      "civicfix_token"
-    );
+    const token = getToken();
 
     if (token) {
       config.headers.Authorization =

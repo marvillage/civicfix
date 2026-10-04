@@ -4,6 +4,7 @@ import {
   createNotification,
   notifyIssueWatchers,
 } from "./notification.service";
+import { notifyWatchZoneOwners } from "./watchzone.service";
 
 interface CreateComplaintData {
   citizenId: string | null;
@@ -158,42 +159,67 @@ export async function createComplaint(
     },
   });
 
-  const issue = await prisma.issue.create({
-    data: {
-      title: data.title,
-      description: data.description,
-      category: category as any,
-      severity: data.isEmergency
-        ? "CRITICAL"
-        : (normalizeSeverity(data.severity) as any),
-      isEmergency: data.isEmergency ?? false,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      address,
-      aiConfidence: data.aiConfidence,
-      status: "REPORTED",
-      departmentId: rule?.departmentId,
-    },
-  });
+  // Issue, complaint and the reporter's points commit together.
+  const { issue, complaint } = await prisma.$transaction(
+    async (tx) => {
+      const issue = await tx.issue.create({
+        data: {
+          title: data.title,
+          description: data.description,
+          category: category as any,
+          severity: data.isEmergency
+            ? "CRITICAL"
+            : (normalizeSeverity(data.severity) as any),
+          isEmergency: data.isEmergency ?? false,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          address,
+          aiConfidence: data.aiConfidence,
+          status: "REPORTED",
+          departmentId: rule?.departmentId,
+        },
+      });
 
-  const complaint = await prisma.complaint.create({
-    data: {
-      citizenId: data.citizenId,
-      issueId: issue.id,
-      imageUrl: data.imageUrl,
-      photos:
-        data.photos && data.photos.length > 0
-          ? data.photos
-          : [data.imageUrl],
-      audioUrl: data.audioUrl,
-      description: data.description,
-      latitude: data.latitude,
-      longitude: data.longitude,
-    },
-    include: {
-      issue: true,
-    },
-  });
+      const complaint = await tx.complaint.create({
+        data: {
+          citizenId: data.citizenId,
+          issueId: issue.id,
+          imageUrl: data.imageUrl,
+          photos:
+            data.photos && data.photos.length > 0
+              ? data.photos
+              : [data.imageUrl],
+          audioUrl: data.audioUrl,
+          description: data.description,
+          latitude: data.latitude,
+          longitude: data.longitude,
+        },
+        include: {
+          issue: true,
+        },
+      });
+
+      // Reward registered citizens for reporting.
+      if (data.citizenId) {
+        await tx.user.update({
+          where: {
+            id: data.citizenId,
+          },
+          data: {
+            points: {
+              increment: 5,
+            },
+          },
+        });
+      }
+
+      return { issue, complaint };
+    }
+  );
+
+  // Every report currently opens a new issue. If reports are ever
+  // merged into an existing issue here, alert only for new ones.
+  alertWatchZones(issue, data.citizenId);
 
   // Emergency reports wake up every admin immediately.
   if (data.isEmergency) {
@@ -211,21 +237,18 @@ export async function createComplaint(
     }
   }
 
-  // Reward registered citizens for reporting.
-  if (data.citizenId) {
-    await prisma.user.update({
-      where: {
-        id: data.citizenId,
-      },
-      data: {
-        points: {
-          increment: 5,
-        },
-      },
-    });
-  }
-
   return complaint;
+}
+
+// Watch Zone alerts run after the report has committed and are
+// fire-and-forget: a failed notification must never fail a report.
+function alertWatchZones(
+  issue: Parameters<typeof notifyWatchZoneOwners>[0],
+  reporterId: string | null
+) {
+  notifyWatchZoneOwners(issue, reporterId).catch((error) => {
+    console.error("Watch zone alert failed:", issue.id, error);
+  });
 }
 
 export async function verifyComplaintResolution(
@@ -450,7 +473,7 @@ export async function createFieldReport(
     },
   });
 
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     const issue = await tx.issue.create({
       data: {
         title: data.title,
@@ -504,6 +527,10 @@ export async function createFieldReport(
 
     return issue;
   });
+
+  alertWatchZones(created, data.authorityId);
+
+  return created;
 }
 
 // ─────────────────────────────────────────────

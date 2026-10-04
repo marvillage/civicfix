@@ -1,22 +1,18 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
-
-const AuthContext = createContext(null);
+import {
+  clearToken,
+  getToken,
+  setToken,
+} from "../lib/session";
+import { AuthContext, HOME_BY_ROLE, useAuth } from "./auth";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !!getToken());
 
   useEffect(() => {
-    const token = localStorage.getItem("civicfix_token");
-
-    if (!token) {
-      setLoading(false);
+    if (!getToken()) {
       return;
     }
 
@@ -26,7 +22,7 @@ export function AuthProvider({ children }) {
         setUser(response.data.user);
       })
       .catch(() => {
-        localStorage.removeItem("civicfix_token");
+        clearToken();
         setUser(null);
       })
       .finally(() => {
@@ -34,31 +30,54 @@ export function AuthProvider({ children }) {
       });
   }, []);
 
-  const login = (token, userData) => {
-    localStorage.setItem("civicfix_token", token);
+  const login = useCallback((token, userData) => {
+    setToken(token);
     setUser(userData);
-  };
+  }, []);
 
-  const logout = () => {
-    localStorage.removeItem("civicfix_token");
+  const logout = useCallback(() => {
+    clearToken();
     setUser(null);
-  };
+  }, []);
+
+  const updateUser = useCallback((patch) => {
+    setUser((current) =>
+      current ? { ...current, ...patch } : current
+    );
+  }, []);
+
+  // The server sends the user's effective permissions; the UI only
+  // uses them to decide what to show. The API enforces them again.
+  const can = useCallback(
+    (permission) =>
+      !!user?.permissions?.includes(permission),
+    [user]
+  );
+
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      login,
+      logout,
+      updateUser,
+      can,
+      isAuthenticated: !!user,
+      homePath: user ? HOME_BY_ROLE[user.role] || "/" : "/",
+    }),
+    [user, loading, login, logout, updateUser, can]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        login,
-        logout,
-        isAuthenticated: !!user,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
+// <Can permission="bulletin:publish">…</Can>
+export function Can({ permission, children, fallback = null }) {
+  const { can } = useAuth();
+
+  return can(permission) ? children : fallback;
 }

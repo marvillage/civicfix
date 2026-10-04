@@ -1,3 +1,4 @@
+import { Prisma } from "../generated/prisma/client";
 import { prisma } from "../lib/prisma";
 import {
   createNotification,
@@ -494,6 +495,40 @@ export async function resolveAssignment(
   return result;
 }
 
+// Slim refs for assignment lists: what the queues and Dispatch
+// render, without status histories or full ward/department rows.
+const ASSIGNMENT_ISSUE_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  category: true,
+  severity: true,
+  status: true,
+  isEmergency: true,
+  reopenCount: true,
+  latitude: true,
+  longitude: true,
+  address: true,
+  createdAt: true,
+  updatedAt: true,
+  department: { select: { id: true, name: true } },
+  ward: { select: { id: true, name: true, code: true } },
+  sla: {
+    select: {
+      id: true,
+      durationMin: true,
+      deadline: true,
+      breached: true,
+      breachedAt: true,
+    },
+  },
+} satisfies Prisma.IssueSelect;
+
+const ORG_REFS = {
+  department: { select: { id: true, name: true } },
+  ward: { select: { id: true, name: true, code: true } },
+} as const;
+
 export async function getMyAssignments(
   authorityId: string
 ) {
@@ -502,20 +537,8 @@ export async function getMyAssignments(
       authorityId,
     },
     include: {
-      issue: {
-        include: {
-          department: true,
-          ward: true,
-          sla: true,
-          statusHistory: {
-            orderBy: {
-              createdAt: "asc",
-            },
-          },
-        },
-      },
-      department: true,
-      ward: true,
+      issue: { select: ASSIGNMENT_ISSUE_SELECT },
+      ...ORG_REFS,
     },
     orderBy: {
       assignedAt: "desc",
@@ -523,26 +546,27 @@ export async function getMyAssignments(
   });
 }
 
-export async function getAllAssignments() {
+// Dispatch board: every open job plus jobs finished in the last
+// `days` days, so the payload stays bounded as history grows.
+export async function getAllAssignments(days = 30) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
   return prisma.assignment.findMany({
+    where: {
+      OR: [{ completedAt: null }, { completedAt: { gte: since } }],
+    },
     include: {
-      issue: {
-        include: {
-          department: true,
-          ward: true,
-          sla: true,
-        },
-      },
+      issue: { select: ASSIGNMENT_ISSUE_SELECT },
       authority: {
         select: {
           id: true,
           name: true,
           email: true,
-          role: true,
+          designation: true,
+          avatarUrl: true,
         },
       },
-      department: true,
-      ward: true,
+      ...ORG_REFS,
     },
     orderBy: {
       assignedAt: "desc",

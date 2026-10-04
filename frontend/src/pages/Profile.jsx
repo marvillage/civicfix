@@ -1,99 +1,110 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import {
+  BadgeCheck,
+  Building2,
+  Camera,
+  CalendarDays,
+  CircleCheck,
+  ClipboardList,
+  IdCard,
+  KeyRound,
+  Mail,
+  MapPin,
+  Palette,
+  Phone,
+  Save,
+  ThumbsUp,
+  UserRound,
+} from "lucide-react";
 import api from "../api/axios";
-import { useAuth } from "../context/AuthContext";
+import { BRAND, FEATURES } from "../brand";
+import { useAuth } from "../context/auth";
+import { ThemeChooser } from "../components/layout/ThemeToggle";
+import { ROLE_LABEL } from "../components/layout/navigation";
+import { Avatar, PageHeader, SectionHeader } from "../components/ui";
+import { formatDate, formatNumber } from "../lib/format";
+import { BadgeGrid } from "./CaseKit";
+
+const BIO_MAX = 280;
 
 export default function Profile() {
-  const navigate = useNavigate();
-  const { user, login, logout } = useAuth();
+  const { user, updateUser } = useAuth();
   const fileRef = useRef(null);
+  const isCitizen = user?.role === "CITIZEN";
 
   const [form, setForm] = useState({
-    name: "",
-    bio: "",
-    ward: "",
-    phone: "",
+    name: user?.name || "",
+    bio: user?.bio || "",
+    ward: user?.ward || "",
+    phone: user?.phone || "",
   });
 
   const [avatarFile, setAvatarFile] = useState(null);
-  const [avatarPreview, setAvatarPreview] =
-    useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
 
   const [impact, setImpact] = useState(null);
   const [badges, setBadges] = useState([]);
 
-  const [savingProfile, setSavingProfile] =
-    useState(false);
-  const [profileMessage, setProfileMessage] =
-    useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
 
-  const [currentPassword, setCurrentPassword] =
-    useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] =
-    useState("");
-  const [passwordMessage, setPasswordMessage] =
-    useState("");
-  const [passwordError, setPasswordError] =
-    useState("");
-  const [savingPassword, setSavingPassword] =
-    useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  // Keep the form in step with the signed-in user (e.g. after /auth/me).
+  const [syncedId, setSyncedId] = useState(user?.id);
+
+  if (user && user.id !== syncedId) {
+    setSyncedId(user.id);
+    setForm({
+      name: user.name || "",
+      bio: user.bio || "",
+      ward: user.ward || "",
+      phone: user.phone || "",
+    });
+  }
 
   useEffect(() => {
-    if (user) {
-      setForm({
-        name: user.name || "",
-        bio: user.bio || "",
-        ward: user.ward || "",
-        phone: user.phone || "",
-      });
-    }
-  }, [user]);
+    if (!isCitizen) return undefined;
 
-  useEffect(() => {
-    if (user?.role !== "CITIZEN") {
-      return;
-    }
+    let cancelled = false;
 
     api
       .get("/dashboard/my-impact")
-      .then((response) =>
-        setImpact(response.data.impact)
-      )
+      .then((response) => !cancelled && setImpact(response.data.impact))
       .catch(() => {});
 
     api
       .get("/dashboard/my-badges")
-      .then((response) =>
-        setBadges(response.data.badges || [])
-      )
+      .then((response) => !cancelled && setBadges(response.data.badges || []))
       .catch(() => {});
-  }, [user?.role]);
 
-  const homePath =
-    user?.role === "ADMIN"
-      ? "/admin"
-      : user?.role === "AUTHORITY"
-        ? "/authority"
-        : "/citizen";
+    return () => {
+      cancelled = true;
+    };
+  }, [isCitizen]);
 
-  const initials = (user?.name || "?")
-    .split(" ")
-    .map((part) => part.charAt(0))
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  useEffect(
+    () => () => {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    },
+    [avatarPreview]
+  );
 
   function handleAvatarPick(event) {
     const file = event.target.files?.[0];
 
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
+    setProfileMessage("");
+    event.target.value = "";
   }
 
   async function handleProfileSubmit(event) {
@@ -105,7 +116,7 @@ export default function Profile() {
 
     try {
       const data = new FormData();
-      data.append("name", form.name);
+      data.append("name", form.name.trim());
       data.append("bio", form.bio);
       data.append("ward", form.ward);
       data.append("phone", form.phone);
@@ -114,23 +125,18 @@ export default function Profile() {
         data.append("avatar", avatarFile);
       }
 
-      const response = await api.patch(
-        "/auth/profile",
-        data
-      );
+      const response = await api.patch("/auth/profile", data);
 
-      login(
-        localStorage.getItem("civicfix_token"),
-        response.data.user
-      );
+      if (response.data.user) {
+        updateUser(response.data.user);
+      }
 
       setAvatarFile(null);
       setAvatarPreview(null);
-      setProfileMessage("Profile updated ✓");
-    } catch (error) {
+      setProfileMessage("Profile saved.");
+    } catch (saveError) {
       setProfileError(
-        error.response?.data?.message ||
-          "Unable to update the profile."
+        saveError.response?.data?.message || "Unable to update your profile."
       );
     } finally {
       setSavingProfile(false);
@@ -143,28 +149,28 @@ export default function Profile() {
     setPasswordError("");
     setPasswordMessage("");
 
+    if (newPassword.length < 8) {
+      setPasswordError("Use at least 8 characters for the new password.");
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
-      setPasswordError(
-        "New password and confirmation do not match."
-      );
+      setPasswordError("The new password and its confirmation don't match.");
       return;
     }
 
     setSavingPassword(true);
 
     try {
-      await api.patch("/auth/password", {
-        currentPassword,
-        newPassword,
-      });
+      await api.patch("/auth/password", { currentPassword, newPassword });
 
-      setPasswordMessage("Password changed ✓");
+      setPasswordMessage("Password changed.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (error) {
+    } catch (passwordFailure) {
       setPasswordError(
-        error.response?.data?.message ||
+        passwordFailure.response?.data?.message ||
           "Unable to change the password."
       );
     } finally {
@@ -172,62 +178,38 @@ export default function Profile() {
     }
   }
 
-  function formatDate(date) {
-    if (!date) {
-      return "";
-    }
-
-    return new Date(date).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  }
-
-  const earned = badges.filter((b) => b.earned);
+  const earned = badges.filter((badge) => badge.earned).length;
+  const roleLabel = ROLE_LABEL[user?.role] ?? user?.role ?? "";
+  const passwordsMatch =
+    confirmPassword.length > 0 && newPassword === confirmPassword;
 
   return (
-    <div className="page">
-      <div className="form-container profile-container">
-        <div className="page-header">
-          <div className="profile-back-row">
-            <Link
-              to={homePath}
-              className="back-link"
-            >
-              <span aria-hidden="true">‹</span>
-              Back to dashboard
-            </Link>
+    <div className="page account">
+      <PageHeader
+        eyebrow="Account"
+        title="Your profile"
+        description={`How you appear to crews and neighbours, and how ${BRAND.name} looks for you.`}
+      />
 
-            <Link to="/" className="back-link">
-              <span aria-hidden="true">⌂</span>
-              Home
-            </Link>
-          </div>
-        </div>
+      <div className="acct-layout">
+        <aside className="card acct-id" aria-label="Your identity">
+          <div className="acct-cover" aria-hidden="true" />
 
-        {/* Profile banner */}
-        <section className="profile-hero">
-          <div className="profile-avatar-wrap">
-            {avatarPreview || user?.avatarUrl ? (
-              <img
-                className="profile-avatar"
-                src={avatarPreview || user.avatarUrl}
-                alt={user?.name}
-              />
+          <div className="acct-avatar">
+            {avatarPreview ? (
+              <img src={avatarPreview} alt="" className="acct-avatar-img" />
             ) : (
-              <div className="profile-avatar profile-avatar-fallback">
-                {initials}
-              </div>
+              <Avatar user={user} size={96} />
             )}
 
             <button
               type="button"
-              className="avatar-edit"
+              className="acct-avatar-edit"
               onClick={() => fileRef.current?.click()}
               aria-label="Change profile picture"
+              title="Change profile picture"
             >
-              ✎
+              <Camera aria-hidden="true" />
             </button>
 
             <input
@@ -239,335 +221,314 @@ export default function Profile() {
             />
           </div>
 
-          <div className="profile-hero-info">
-            <h1>{user?.name}</h1>
-
-            <p className="profile-email">
+          <div className="acct-name">
+            <h2>{user?.name}</h2>
+            <p>
+              <Mail aria-hidden="true" />
               {user?.email}
             </p>
-
-            <div className="profile-chips">
-              <span
-                className={`role-badge role-${(user?.role || "citizen").toLowerCase()}`}
-              >
-                {user?.role}
-              </span>
-
-              {user?.role === "CITIZEN" &&
-                typeof user?.points === "number" && (
-                  <span className="points-chip profile-points">
-                    ★ {user.points} civic points
-                  </span>
-                )}
-
-              {user?.designation && (
-                <span className="profile-meta-chip">
-                  {user.designation}
-                </span>
-              )}
-
-              {user?.department?.name && (
-                <span className="profile-meta-chip">
-                  {user.department.name}
-                </span>
-              )}
-
-              {user?.employeeId && (
-                <span className="profile-meta-chip">
-                  ID: {user.employeeId}
-                </span>
-              )}
-
-              {user?.createdAt && (
-                <span className="profile-meta-chip">
-                  Joined {formatDate(user.createdAt)}
-                </span>
-              )}
-            </div>
-
-            {user?.bio && (
-              <p className="profile-bio">{user.bio}</p>
-            )}
           </div>
-        </section>
 
-        {/* Citizen impact */}
-        {user?.role === "CITIZEN" && impact && (
-          <section className="stats-grid impact-grid">
-            <div className="stat-card">
-              <h2>{impact.totalReports}</h2>
-              <p>Reports filed</p>
-            </div>
-
-            <div className="stat-card">
-              <h2>{impact.resolved}</h2>
-              <p>Fixed because of you</p>
-            </div>
-
-            <div className="stat-card">
-              <h2>{impact.upvotesReceived}</h2>
-              <p>Upvotes received</p>
-            </div>
-          </section>
-        )}
-
-        {/* Badges */}
-        {user?.role === "CITIZEN" &&
-          earned.length > 0 && (
-            <section className="details-card">
-              <p className="eyebrow">ACHIEVEMENTS</p>
-
-              <h2>
-                Badges earned ({earned.length}/
-                {badges.length})
-              </h2>
-
-              <div className="badge-grid">
-                {badges.map((badge) => (
-                  <div
-                    key={badge.id}
-                    className={`badge-card ${badge.earned ? "" : "badge-locked"}`}
-                    title={badge.description}
-                  >
-                    <span className="badge-icon">
-                      {badge.icon}
-                    </span>
-                    <strong>{badge.name}</strong>
-                    <small>{badge.description}</small>
-                  </div>
-                ))}
-              </div>
-            </section>
+          {avatarFile && (
+            <p className="acct-pending">
+              New picture selected. Save your details to apply it.
+            </p>
           )}
 
-        {/* Edit details */}
-        <section className="details-card">
-          <p className="eyebrow">EDIT</p>
+          <div className="acct-chips">
+            <span
+              className={`role-badge role-${(user?.role || "citizen").toLowerCase()}`}
+            >
+              {roleLabel}
+            </span>
+            {user?.designation && <span className="chip">{user.designation}</span>}
+          </div>
 
-          <h2>Profile details</h2>
+          {user?.bio && <p className="acct-bio">{user.bio}</p>}
 
-          <form onSubmit={handleProfileSubmit}>
-            <div className="form-group">
-              <label htmlFor="profile-name">
-                Display name
-              </label>
-
-              <input
-                id="profile-name"
-                type="text"
-                value={form.name}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    name: event.target.value,
-                  })
-                }
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="profile-bio">
-                About you
-              </label>
-
-              <textarea
-                id="profile-bio"
-                value={form.bio}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    bio: event.target.value,
-                  })
-                }
-                rows={3}
-                maxLength={280}
-                placeholder="A line about you and the area you care about."
-              />
-            </div>
-
-            <div className="location-fields">
-              <div className="form-group">
-                <label htmlFor="profile-ward">
-                  Your ward / locality
-                </label>
-
-                <input
-                  id="profile-ward"
-                  type="text"
-                  value={form.ward}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      ward: event.target.value,
-                    })
-                  }
-                  placeholder="e.g. Gandhi Nagar (W-12)"
-                />
+          <dl className="acct-facts">
+            {user?.department?.name && (
+              <div>
+                <dt>
+                  <Building2 aria-hidden="true" />
+                  Department
+                </dt>
+                <dd>{user.department.name}</dd>
               </div>
-
-              <div className="form-group">
-                <label htmlFor="profile-phone">
+            )}
+            {user?.employeeId && (
+              <div>
+                <dt>
+                  <IdCard aria-hidden="true" />
+                  Employee ID
+                </dt>
+                <dd className="mono">{user.employeeId}</dd>
+              </div>
+            )}
+            {user?.ward && (
+              <div>
+                <dt>
+                  <MapPin aria-hidden="true" />
+                  Ward
+                </dt>
+                <dd>{user.ward}</dd>
+              </div>
+            )}
+            {user?.phone && (
+              <div>
+                <dt>
+                  <Phone aria-hidden="true" />
                   Phone
-                </label>
-
-                <input
-                  id="profile-phone"
-                  type="tel"
-                  value={form.phone}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      phone: event.target.value,
-                    })
-                  }
-                  placeholder="+91 …"
-                />
-              </div>
-            </div>
-
-            {avatarFile && (
-              <p className="detail-label">
-                New picture selected: {avatarFile.name}
-              </p>
-            )}
-
-            {profileError && (
-              <div className="form-error">
-                {profileError}
+                </dt>
+                <dd>{user.phone}</dd>
               </div>
             )}
-
-            {profileMessage && (
-              <div className="form-success">
-                {profileMessage}
+            {user?.createdAt && (
+              <div>
+                <dt>
+                  <CalendarDays aria-hidden="true" />
+                  Joined
+                </dt>
+                <dd>{formatDate(user.createdAt, { day: undefined })}</dd>
               </div>
             )}
+          </dl>
 
-            <button
-              type="submit"
-              disabled={savingProfile}
-            >
-              {savingProfile && (
-                <span className="spinner" />
+          {isCitizen && (
+            <div className="acct-cred">
+              <div className="acct-cred-head">
+                <span className="eyebrow">{FEATURES.civicCred}</span>
+                <strong>
+                  {formatNumber(user?.points ?? 0)}
+                  <span> points</span>
+                </strong>
+              </div>
+
+              {impact && (
+                <ul className="acct-footprint" aria-label={FEATURES.footprint}>
+                  <li>
+                    <ClipboardList aria-hidden="true" />
+                    <strong>{formatNumber(impact.totalReports ?? 0)}</strong>
+                    <span>reports</span>
+                  </li>
+                  <li>
+                    <CircleCheck aria-hidden="true" />
+                    <strong>{formatNumber(impact.resolved ?? 0)}</strong>
+                    <span>fixed</span>
+                  </li>
+                  <li>
+                    <ThumbsUp aria-hidden="true" />
+                    <strong>{formatNumber(impact.upvotesReceived ?? 0)}</strong>
+                    <span>backers</span>
+                  </li>
+                </ul>
               )}
-              {savingProfile
-                ? "Saving…"
-                : "Save changes"}
-            </button>
-          </form>
-        </section>
 
-        {/* Password */}
-        <section className="details-card">
-          <p className="eyebrow">SECURITY</p>
-
-          <h2>Change password</h2>
-
-          <form onSubmit={handlePasswordSubmit}>
-            <div className="form-group">
-              <label htmlFor="current-password">
-                Current password
-              </label>
-
-              <input
-                id="current-password"
-                type="password"
-                value={currentPassword}
-                onChange={(event) =>
-                  setCurrentPassword(
-                    event.target.value
-                  )
-                }
-                required
-              />
+              {badges.length > 0 && (
+                <>
+                  <p className="acct-badge-count">
+                    <BadgeCheck aria-hidden="true" />
+                    {earned} of {badges.length} badges earned
+                  </p>
+                  <BadgeGrid badges={badges} compact />
+                </>
+              )}
             </div>
+          )}
+        </aside>
 
-            <div className="location-fields">
-              <div className="form-group">
-                <label htmlFor="new-password">
-                  New password (min 8)
-                </label>
+        <div className="acct-main">
+          <section className="card" aria-labelledby="details-title">
+            <SectionHeader
+              eyebrow="Details"
+              title={
+                <span id="details-title" className="acct-title">
+                  <UserRound aria-hidden="true" />
+                  Profile details
+                </span>
+              }
+              description="Your name and photo show on your reports, Street Talk replies and the leaderboard."
+            />
 
+            <form onSubmit={handleProfileSubmit}>
+              <div className="field">
+                <label htmlFor="profile-name">Display name</label>
                 <input
-                  id="new-password"
-                  type="password"
-                  value={newPassword}
-                  onChange={(event) =>
-                    setNewPassword(event.target.value)
-                  }
-                  minLength={8}
+                  id="profile-name"
+                  type="text"
+                  value={form.name}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                  autoComplete="name"
                   required
                 />
               </div>
 
-              <div className="form-group">
-                <label htmlFor="confirm-password">
-                  Confirm new password
-                </label>
+              <div className="field">
+                <label htmlFor="profile-bio">About you</label>
+                <textarea
+                  id="profile-bio"
+                  value={form.bio}
+                  onChange={(event) => setForm({ ...form, bio: event.target.value })}
+                  rows={3}
+                  maxLength={BIO_MAX}
+                  placeholder="A line about you and the streets you care about."
+                  aria-describedby="profile-bio-count"
+                />
+                <span id="profile-bio-count" className="field-hint acct-count">
+                  {form.bio.length}/{BIO_MAX}
+                </span>
+              </div>
 
+              <div className="form-row">
+                <div className="field">
+                  <label htmlFor="profile-ward">Ward or locality</label>
+                  <input
+                    id="profile-ward"
+                    type="text"
+                    value={form.ward}
+                    onChange={(event) => setForm({ ...form, ward: event.target.value })}
+                    placeholder="e.g. Gandhi Nagar (W-12)"
+                  />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="profile-phone">Phone</label>
+                  <input
+                    id="profile-phone"
+                    type="tel"
+                    value={form.phone}
+                    onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                    placeholder="+91 …"
+                    autoComplete="tel"
+                  />
+                </div>
+              </div>
+
+              {profileError && (
+                <div className="form-error" role="alert">
+                  {profileError}
+                </div>
+              )}
+
+              {profileMessage && (
+                <div className="form-success" role="status">
+                  {profileMessage}
+                </div>
+              )}
+
+              <button type="submit" disabled={savingProfile}>
+                {savingProfile ? (
+                  <span className="spinner" aria-hidden="true" />
+                ) : (
+                  <Save aria-hidden="true" />
+                )}
+                {savingProfile ? "Saving…" : "Save details"}
+              </button>
+            </form>
+          </section>
+
+          <section className="card" aria-labelledby="password-title">
+            <SectionHeader
+              eyebrow="Security"
+              title={
+                <span id="password-title" className="acct-title">
+                  <KeyRound aria-hidden="true" />
+                  Change password
+                </span>
+              }
+            />
+
+            <form onSubmit={handlePasswordSubmit}>
+              <div className="field">
+                <label htmlFor="current-password">Current password</label>
                 <input
-                  id="confirm-password"
+                  id="current-password"
                   type="password"
-                  value={confirmPassword}
-                  onChange={(event) =>
-                    setConfirmPassword(
-                      event.target.value
-                    )
-                  }
-                  minLength={8}
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  autoComplete="current-password"
                   required
                 />
               </div>
-            </div>
 
-            {passwordError && (
-              <div className="form-error">
-                {passwordError}
+              <div className="form-row">
+                <div className="field">
+                  <label htmlFor="new-password">New password</label>
+                  <input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    minLength={8}
+                    autoComplete="new-password"
+                    aria-describedby="new-password-hint"
+                    required
+                  />
+                  <span id="new-password-hint" className="field-hint">
+                    At least 8 characters.
+                  </span>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="confirm-password">Confirm new password</label>
+                  <input
+                    id="confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    minLength={8}
+                    autoComplete="new-password"
+                    required
+                  />
+                  {passwordsMatch && (
+                    <span className="field-hint acct-match">
+                      <CircleCheck aria-hidden="true" />
+                      Matches
+                    </span>
+                  )}
+                </div>
               </div>
-            )}
 
-            {passwordMessage && (
-              <div className="form-success">
-                {passwordMessage}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={savingPassword}
-            >
-              {savingPassword && (
-                <span className="spinner" />
+              {passwordError && (
+                <div className="form-error" role="alert">
+                  {passwordError}
+                </div>
               )}
-              {savingPassword
-                ? "Changing…"
-                : "Change password"}
-            </button>
-          </form>
-        </section>
 
-        <section className="details-card">
-          <p className="eyebrow">SESSION</p>
+              {passwordMessage && (
+                <div className="form-success" role="status">
+                  {passwordMessage}
+                </div>
+              )}
 
-          <h2>Sign out</h2>
+              <button type="submit" className="btn-secondary" disabled={savingPassword}>
+                {savingPassword ? (
+                  <span className="spinner" aria-hidden="true" />
+                ) : (
+                  <KeyRound aria-hidden="true" />
+                )}
+                {savingPassword ? "Changing…" : "Change password"}
+              </button>
+            </form>
+          </section>
 
-          <p className="verification-intro">
-            You will need to log in again to access
-            your dashboard.
-          </p>
+          <section className="card" aria-labelledby="appearance-title">
+            <SectionHeader
+              eyebrow="Appearance"
+              title={
+                <span id="appearance-title" className="acct-title">
+                  <Palette aria-hidden="true" />
+                  Theme
+                </span>
+              }
+              description="Light, dark, or follow your device. Saved on this browser."
+            />
 
-          <button
-            type="button"
-            className="verification-danger-button"
-            onClick={() => {
-              logout();
-              navigate("/login");
-            }}
-          >
-            Log out
-          </button>
-        </section>
+            <div className="acct-theme">
+              <ThemeChooser />
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );

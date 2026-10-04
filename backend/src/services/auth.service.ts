@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
+import { permissionsFor } from "../auth/permissions";
 
 export async function registerUser(
   name: string,
@@ -32,7 +33,10 @@ export async function registerUser(
     },
   });
 
-  return user;
+  return {
+    ...user,
+    permissions: permissionsFor(user.role),
+  };
 }
 
 interface AuthoritySignup {
@@ -184,6 +188,7 @@ export async function loginUser(
       employeeId: user.employeeId,
       designation: user.designation,
       createdAt: user.createdAt,
+      permissions: permissionsFor(user.role),
     },
   };
 }

@@ -1,5 +1,5 @@
 /**
- * Converts the CivicFix markdown docs into styled PDFs using
+ * Converts the Fixity markdown docs into styled PDFs using
  * headless Chrome. No dependencies beyond Node and Chrome.
  *
  *   node docs/build-pdf.js
@@ -26,12 +26,12 @@ if (!CHROME) {
 }
 
 const FILES = [
-  { file: "../README.md", title: "CivicFix — Overview" },
-  { file: "FEATURES.md", title: "CivicFix — Feature Documentation" },
-  { file: "API.md", title: "CivicFix — API Reference" },
-  { file: "ARCHITECTURE.md", title: "CivicFix — Technical Architecture" },
-  { file: "INTERVIEW-PREP.md", title: "CivicFix — Interview Prep" },
-  { file: "TESTING.md", title: "CivicFix — Manual Testing Guide" },
+  { file: "../README.md", title: "Fixity — Overview" },
+  { file: "FEATURES.md", title: "Fixity — Feature Documentation" },
+  { file: "API.md", title: "Fixity — API Reference" },
+  { file: "ARCHITECTURE.md", title: "Fixity — Technical Architecture" },
+  { file: "INTERVIEW-PREP.md", title: "Fixity — Interview Prep" },
+  { file: "TESTING.md", title: "Fixity — Testing Guide" },
 ];
 
 function escapeHtml(text) {
@@ -291,7 +291,7 @@ for (const doc of FILES) {
 <style>${CSS}</style></head>
 <body>
 <div class="cover">
-  <div class="brand">CivicFix</div>
+  <div class="brand">Fixity</div>
   <h1>${subtitle || doc.title}</h1>
   <p class="sub">Civic issue reporting platform &mdash; citizens report, authorities fix, everyone verifies.</p>
   <div class="meta">Project documentation &middot; Generated ${today}</div>
@@ -302,7 +302,7 @@ ${body}
   const tmpHtml = path.join(OUT, `${base}.html`);
   fs.writeFileSync(tmpHtml, html, "utf8");
 
-  const pdfPath = path.join(OUT, `CivicFix-${base}.pdf`);
+  const pdfPath = path.join(OUT, `Fixity-${base}.pdf`);
 
   execFileSync(
     CHROME,

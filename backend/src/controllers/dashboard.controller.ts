@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { BRAND } from "../config/brand";
 import {
   getDashboardStats,
   getAnalytics,
@@ -225,7 +226,7 @@ export async function exportIssuesCSVController(
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="civicfix-issues-${new Date().toISOString().slice(0, 10)}.csv"`
+      `attachment; filename="${BRAND.name.toLowerCase()}-cases-${new Date().toISOString().slice(0, 10)}.csv"`
     );
 
     return res.status(200).send(csv);

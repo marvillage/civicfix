@@ -1,0 +1,1824 @@
+/* =========================================================
+   CITIZEN — Home, Snap & Send, My Cases, Case File (Sign-Off)
+   plus the "case kit" shared with the officer pages
+   (pages/CaseKit.jsx).
+========================================================= */
+
+/* ---------- Case kit: back link ---------- */
+
+.case-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  width: fit-content;
+  color: var(--text-2);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.case-back svg {
+  width: 16px;
+  height: 16px;
+  transition: transform var(--t-fast);
+}
+
+.case-back:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.case-back:hover svg {
+  transform: translateX(-2px);
+}
+
+/* ---------- Case kit: Fix Clock ---------- */
+
+.fix-chip {
+  font-variant-numeric: tabular-nums;
+}
+
+.fix-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fix-chip-ok {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.fix-chip-urgent {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.fix-chip-breached {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.fix-chip-done {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.fix-panel {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.fix-panel-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fix-panel-big {
+  font-size: 28px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.fix-panel-big small {
+  color: var(--text-3);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.fix-panel-foot,
+.fix-panel-empty {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.fix-track {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.fix-track > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--primary);
+}
+
+.fix-panel-urgent {
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border));
+  background: color-mix(in srgb, var(--warning-soft) 60%, var(--surface));
+}
+
+.fix-panel-urgent .fix-track > span {
+  background: var(--status-warn);
+}
+
+.fix-panel-breached {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger-soft) 60%, var(--surface));
+}
+
+.fix-panel-breached .fix-track > span {
+  background: var(--status-critical);
+}
+
+.fix-panel-done .fix-track > span {
+  background: var(--status-good);
+}
+
+/* ---------- Case kit: timeline ---------- */
+
+.case-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.case-timeline .is-site-update .timeline-marker {
+  border-style: dashed;
+  border-color: var(--accent-text);
+}
+
+/* ---------- Case kit: photo picker ---------- */
+
+.pick-photos {
+  display: grid;
+  gap: 12px;
+}
+
+.pick-previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pick-preview {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+  animation: pop-in 180ms var(--ease);
+}
+
+.pick-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pick-cover {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.pick-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--navy-900) 72%, transparent);
+  color: var(--navy-50);
+}
+
+.pick-remove:hover {
+  background: var(--danger);
+}
+
+.pick-remove svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pick-drop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast);
+}
+
+/* The real input stays focusable but invisible (beats the global
+   input[type="file"] sizing). */
+.pick-drop input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.pick-drop:hover {
+  border-color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.pick-drop:focus-within {
+  border-color: var(--accent-text);
+  box-shadow: var(--focus-ring);
+}
+
+.pick-drop.is-compact {
+  padding: 14px 16px;
+}
+
+.pick-drop.is-full {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.pick-drop-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--navy-800);
+  color: var(--yellow-500);
+}
+
+:root[data-theme="dark"] .pick-drop-icon {
+  background: var(--accent-soft);
+}
+
+.pick-drop-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.pick-drop.is-compact .pick-drop-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.pick-drop-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pick-drop-text strong {
+  font-size: 15px;
+}
+
+.pick-drop-text span {
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ---------- Case kit: location picker ---------- */
+
+.pick-geo {
+  display: grid;
+  gap: 14px;
+}
+
+.pick-geo-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.pick-geo .field {
+  margin-bottom: 0;
+}
+
+.pick-geo-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--info-soft);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pick-geo-address svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  margin-top: 2px;
+  color: var(--info);
+}
+
+/* ---------- Case kit: Civic Cred badges ---------- */
+
+.cred-badges {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cred-badges.is-compact {
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 8px;
+}
+
+.cred-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.cred-badges.is-compact .cred-badge {
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 4px 8px;
+  text-align: center;
+}
+
+.cred-medal {
+  position: relative;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--navy-900) 18%, transparent);
+}
+
+.cred-medal svg {
+  width: 19px;
+  height: 19px;
+}
+
+.cred-badge.is-locked .cred-medal {
+  background: var(--surface-3);
+  color: var(--text-3);
+  box-shadow: none;
+}
+
+.cred-lock {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-3);
+}
+
+.cred-lock svg {
+  width: 10px;
+  height: 10px;
+}
+
+.cred-badge-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cred-badge-text strong {
+  font-size: 13.5px;
+  line-height: 1.25;
+}
+
+.cred-badges.is-compact .cred-badge-text strong {
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.cred-badge-text small {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.cred-badge.is-locked .cred-badge-text strong {
+  color: var(--text-3);
+}
+
+/* ---------- Citizen home ---------- */
+
+.cz-signoff {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.cz-signoff-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.cz-signoff-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.cz-signoff-text {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cz-signoff-text strong {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.cz-signoff-text span {
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.cz-signoff-cta {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-weight: 750;
+}
+
+.cz-signoff-cta svg {
+  width: 18px;
+  height: 18px;
+  transition: transform var(--t-fast);
+}
+
+.cz-signoff:hover .cz-signoff-cta svg {
+  transform: translateX(3px);
+}
+
+.cz-main {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  min-width: 0;
+}
+
+.cz-cases {
+  container: cz-cases / inline-size;
+}
+
+.cz-cases .section-head {
+  margin-bottom: 6px;
+}
+
+.cz-case {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 4px;
+  color: inherit;
+}
+
+.cz-case:hover {
+  text-decoration: none;
+}
+
+.cz-case:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cz-case-thumb {
+  width: 58px;
+  height: 58px;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+  object-fit: cover;
+}
+
+.cz-case-thumb-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+
+.cz-case-thumb-empty svg {
+  width: 22px;
+  height: 22px;
+}
+
+.cz-case-main {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cz-case-main strong {
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.cz-case-arrow {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--text-3);
+}
+
+.cz-case-skeletons {
+  display: grid;
+  gap: 10px;
+}
+
+.cz-case-skeletons span {
+  height: 66px;
+}
+
+/* Civic Cred rail */
+
+.cz-cred {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.cz-cred .eyebrow {
+  margin: 0;
+}
+
+.cz-cred-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.cz-cred-score strong {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.cz-cred-score strong span {
+  color: var(--text-3);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.cz-cred-note {
+  color: var(--text-3);
+  font-size: 13.5px;
+}
+
+.cz-cred-block {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.cz-cred-block h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-3);
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cz-cred-block h3 span {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.cz-board {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cz-board li {
+  display: grid;
+  grid-template-columns: 18px 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.cz-board li.is-me {
+  background: var(--accent-soft);
+}
+
+.cz-board-rank {
+  color: var(--text-3);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  text-align: center;
+}
+
+.cz-board-name {
+  display: grid;
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.cz-board-name em {
+  color: var(--text-3);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.cz-board-name small {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cz-board-points {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Community feeds */
+
+.cz-feeds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  gap: 16px;
+}
+
+.cz-feed {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 18px;
+}
+
+.cz-feed-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cz-feed-head h3 {
+  flex: 1;
+  font-size: 15.5px;
+}
+
+.cz-feed-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.cz-feed-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.cz-feed-link {
+  font-size: 13px;
+}
+
+.cz-feed-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cz-feed-list > li {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+}
+
+.cz-feed-list > li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.cz-feed-list strong {
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+
+.cz-feed-list small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.cz-feed-list small svg {
+  width: 13px;
+  height: 13px;
+}
+
+.cz-feed-row-link {
+  color: inherit;
+}
+
+.cz-feed-empty {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.cz-feed-empty p {
+  color: var(--text-3);
+  font-size: 13.5px;
+}
+
+.cz-feed-skeleton {
+  display: block;
+  height: 72px;
+}
+
+.cz-feed-list > li.cz-drive {
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.cz-drive > span:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.cz-drive-date {
+  display: grid;
+  width: 48px;
+  padding: 6px 0;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--navy-800);
+  color: var(--navy-100);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.cz-drive-date strong {
+  color: var(--yellow-400);
+  font-size: 19px;
+}
+
+:root[data-theme="dark"] .cz-drive-date {
+  background: var(--accent-soft);
+  color: var(--text-2);
+}
+
+.cz-zone-total {
+  color: var(--text-2);
+  font-size: 13.5px;
+}
+
+.cz-zone-total strong {
+  font-size: 20px;
+}
+
+.cz-feed-list > li.cz-zone {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 10px;
+}
+
+.cz-zone small {
+  grid-row: 2;
+}
+
+.cz-zone .chip {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+
+@media (max-width: 560px) {
+  .cz-signoff {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px 14px;
+    padding: 16px;
+  }
+
+  .cz-signoff-cta {
+    grid-column: 2;
+  }
+}
+
+/* Case rows follow the width of their card, not the viewport. */
+@container cz-cases (max-width: 520px) {
+  .cz-case {
+    flex-wrap: wrap;
+  }
+
+  .cz-case-main {
+    flex-basis: calc(100% - 100px);
+  }
+
+  .cz-case .fix-chip {
+    margin-left: 72px;
+  }
+
+  .cz-case-arrow {
+    display: none;
+  }
+}
+
+/* ---------- My Cases ---------- */
+
+.red-alert svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mc-seg-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-3) 14%, transparent);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  text-align: center;
+}
+
+.segmented button.is-active .mc-seg-count {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.mc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mc-grid > li {
+  min-width: 0;
+}
+
+.mc-card {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.mc-card.is-signoff {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.mc-photo {
+  position: relative;
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--text-3);
+}
+
+.mc-photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mc-photo > svg {
+  width: 28px;
+  height: 28px;
+}
+
+.mc-photo-count {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--navy-900) 78%, transparent);
+  color: var(--navy-50);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mc-body {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 18px;
+}
+
+.mc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mc-title {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.mc-card:hover .mc-title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mc-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.mc-address {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mc-address svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.mc-when {
+  flex: 1;
+}
+
+@media (max-width: 560px) {
+  .mc-filters .segmented {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .mc-filters .segmented button {
+    flex: none;
+  }
+
+  .mc-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mc-photo {
+    height: 150px;
+  }
+}
+
+/* ---------- Snap & Send (also used by Patrol Log) ---------- */
+
+.snap-layout {
+  align-items: start;
+}
+
+.snap-steps {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.snap-step {
+  display: grid;
+  gap: 18px;
+}
+
+.snap-step .field {
+  margin-bottom: 0;
+}
+
+.snap-step-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.snap-step-num {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  transition:
+    background var(--t),
+    border-color var(--t);
+}
+
+.snap-step-num.is-done {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.snap-step-num svg {
+  width: 17px;
+  height: 17px;
+}
+
+.snap-step-head h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 18px;
+}
+
+.snap-step-head p {
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.snap-optional {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--text-3);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.snap-field-label {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+/* Echo Check */
+
+.echo {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--info) 30%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--info-soft) 70%, var(--surface));
+  animation: rise-in 220ms var(--ease);
+}
+
+.echo-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.echo-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--info);
+  color: var(--surface);
+}
+
+.echo-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.echo-head strong {
+  font-size: 15px;
+}
+
+.echo-head p {
+  margin-top: 2px;
+  font-size: 13.5px;
+}
+
+.echo-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.echo-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.echo-info {
+  display: grid;
+  flex: 1 1 260px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.echo-info strong {
+  font-size: 14.5px;
+}
+
+.echo-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.echo-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13.5px;
+}
+
+.echo-view svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Red Alert toggle */
+
+.snap-redalert {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast);
+}
+
+.snap-redalert:hover {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+.snap-redalert input {
+  grid-row: 1;
+  grid-column: 3;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--danger) !important;
+}
+
+.snap-redalert-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  grid-row: 1;
+  grid-column: 1;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  color: var(--danger);
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.snap-redalert-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.snap-redalert-text {
+  display: grid;
+  grid-row: 1;
+  grid-column: 2;
+  gap: 2px;
+}
+
+.snap-redalert-text strong {
+  font-size: 15.5px;
+}
+
+.snap-redalert-text span {
+  color: var(--text-2);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.snap-redalert.is-on {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 70%, var(--surface));
+}
+
+.snap-redalert.is-on .snap-redalert-icon {
+  background: var(--danger);
+  color: var(--surface);
+}
+
+.snap-submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding-top: 4px;
+}
+
+/* Guide rail */
+
+.snap-aside {
+  position: sticky;
+  top: calc(var(--topbar-h) + 20px);
+}
+
+.snap-guide img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+.snap-guide-body {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px 22px;
+}
+
+.snap-guide-body h2 {
+  font-size: 17px;
+}
+
+.snap-guide-steps {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.snap-guide-steps li {
+  display: flex;
+  gap: 12px;
+}
+
+.snap-guide-steps li > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.snap-guide-steps li > span svg {
+  width: 17px;
+  height: 17px;
+}
+
+.snap-guide-steps strong {
+  font-size: 14.5px;
+}
+
+.snap-guide-steps p {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 13.5px;
+}
+
+@media (max-width: 1080px) {
+  .snap-aside {
+    position: static;
+  }
+
+  .snap-guide {
+    display: grid;
+    grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  }
+
+  .snap-guide img {
+    height: 100%;
+    aspect-ratio: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .snap-submit button {
+    width: 100%;
+  }
+
+  .snap-guide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .snap-guide img {
+    display: none;
+  }
+
+  .snap-redalert {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    padding: 14px;
+  }
+
+  .snap-redalert-icon {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* ---------- Case File (citizen + officer) ---------- */
+
+.case-head-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.case-head-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  color: var(--text-3);
+  font-size: 13.5px;
+}
+
+.case-head-when svg {
+  width: 15px;
+  height: 15px;
+}
+
+.case-layout {
+  align-items: start;
+}
+
+.case-main {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+
+.case-side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.case-threads {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+
+/* One column: evidence, then the facts rail, then the timeline and
+   the threads, so the Fix Clock is not buried under the chat. */
+@media (max-width: 1080px) {
+  .case-layout > .case-main {
+    display: contents;
+  }
+
+  .case-layout > .case-side {
+    order: 1;
+  }
+
+  .case-layout .case-history {
+    order: 2;
+  }
+
+  .case-layout .case-threads {
+    order: 3;
+  }
+}
+
+.case-side > .fix-panel {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.case-side > .fix-panel:not(.fix-panel-urgent):not(.fix-panel-breached) {
+  background: var(--surface);
+}
+
+.case-side-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.case-side-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15.5px;
+}
+
+.case-side-title svg {
+  width: 17px;
+  height: 17px;
+  color: var(--accent-text);
+}
+
+.case-side-note {
+  color: var(--text-3);
+  font-size: 13.5px;
+}
+
+.case-facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.case-facts > div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.case-facts dt {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.case-facts dt svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 2px;
+}
+
+.case-facts dd {
+  display: grid;
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.case-facts dd small {
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.case-address {
+  display: flex;
+  gap: 8px;
+  color: var(--text);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.case-address svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 3px;
+  color: var(--text-3);
+}
+
+.case-coords {
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.case-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.case-withdraw {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+}
+
+.case-withdraw .form-error {
+  margin: 0;
+}
+
+.case-withdraw button {
+  justify-self: start;
+}
+
+.case-updated {
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.case-evidence {
+  display: grid;
+  gap: 16px;
+}
+
+.case-description {
+  color: var(--text-2);
+  font-size: 15px;
+  white-space: pre-line;
+}
+
+.case-voice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.case-voice > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.case-voice svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent-text);
+}
+
+.case-voice audio {
+  flex: 1 1 240px;
+  max-width: 100%;
+  height: 36px;
+}
+
+/* ---------- Sign-Off ---------- */
+
+.signoff {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+  background:
+    linear-gradient(180deg, var(--accent-soft), transparent 260px),
+    var(--surface);
+}
+
+.signoff-intro {
+  display: grid;
+  gap: 6px;
+  max-width: 72ch;
+}
+
+.signoff-intro .eyebrow {
+  margin: 0;
+}
+
+.signoff-intro h2 {
+  font-size: 23px;
+}
+
+.signoff-note {
+  margin: 6px 0 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.signoff-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.signoff-compare figure {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.signoff-compare img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background: var(--surface-3);
+}
+
+.signoff-compare figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.signoff-noproof {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-3);
+  font-size: 14px;
+  text-align: center;
+}
+
+.signoff-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.signoff-choices button {
+  flex: 1 1 220px;
+}
+
+.signoff-form {
+  display: grid;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  animation: rise-in 200ms var(--ease);
+}
+
+.signoff-form.is-reopen {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.signoff-form h3 {
+  margin-bottom: 14px;
+}
+
+.signoff-label {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.star-rating {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.star-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+}
+
+.star-button:hover {
+  background: var(--surface-3);
+}
+
+.star-button svg {
+  width: 30px;
+  height: 30px;
+  stroke-width: 1.6;
+}
+
+.star-button.is-on svg {
+  fill: var(--accent);
+  stroke: var(--accent-text);
+}
+
+.star-word {
+  margin-left: 8px;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+@media (max-width: 560px) {
+  .signoff {
+    padding: 18px;
+  }
+
+  .signoff-compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .case-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}

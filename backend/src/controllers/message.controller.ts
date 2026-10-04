@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { param } from "../lib/http";
 import {
   getIssueMessages,
   sendIssueMessage,
@@ -43,7 +44,7 @@ export async function getIssueMessagesController(
     }
 
     const messages = await getIssueMessages(
-      req.params.issueId,
+      param(req, "issueId"),
       req.user.userId,
       req.user.role
     );
@@ -84,7 +85,7 @@ export async function sendIssueMessageController(
     }
 
     const message = await sendIssueMessage(
-      req.params.issueId,
+      param(req, "issueId"),
       req.user.userId,
       req.user.role,
       text.trim()

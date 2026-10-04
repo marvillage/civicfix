@@ -1,5 +1,7 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { param } from "../lib/http";
+import { recordAudit } from "../services/audit.service";
 import {
   getAllUsers,
   changeUserRole,
@@ -12,7 +14,7 @@ export async function verifyUserController(
   res: Response
 ) {
   try {
-    const { userId } = req.params;
+    const userId = param(req, "userId");
     const { verified } = req.body;
 
     if (typeof verified !== "boolean") {
@@ -25,6 +27,15 @@ export async function verifyUserController(
       userId,
       verified
     );
+
+    await recordAudit({
+      actorId: req.user?.userId,
+      action: "user.verify",
+      entityType: "User",
+      entityId: user.id,
+      meta: { verified },
+      ip: req.ip,
+    });
 
     return res.status(200).json({
       message: verified
@@ -81,7 +92,7 @@ export async function changeUserRoleController(
       });
     }
 
-    const { userId } = req.params;
+    const userId = param(req, "userId");
     const { role } = req.body;
 
     const validRoles = ["CITIZEN", "AUTHORITY", "ADMIN"];
@@ -92,11 +103,20 @@ export async function changeUserRoleController(
       });
     }
 
-    const user = await changeUserRole(
+    const { user, previousRole } = await changeUserRole(
       userId,
       role,
       req.user.userId
     );
+
+    await recordAudit({
+      actorId: req.user.userId,
+      action: "user.role.change",
+      entityType: "User",
+      entityId: user.id,
+      meta: { from: previousRole, to: user.role },
+      ip: req.ip,
+    });
 
     return res.status(200).json({
       message: `Role updated to ${role}`,
@@ -153,6 +173,20 @@ export async function createAuthorityController(
       designation,
       phone,
       departmentId: departmentId || undefined,
+    });
+
+    // Never log the temporary password.
+    await recordAudit({
+      actorId: req.user?.userId,
+      action: "user.authority.create",
+      entityType: "User",
+      entityId: result.user.id,
+      meta: {
+        email: result.user.email,
+        employeeId: result.user.employeeId,
+        departmentId: result.user.department?.id ?? null,
+      },
+      ip: req.ip,
     });
 
     return res.status(201).json({

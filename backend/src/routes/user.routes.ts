@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware";
-import { authorizeRoles } from "../middleware/role.middleware";
+import { requirePermission } from "../middleware/role.middleware";
 import {
   getAllUsersController,
   changeUserRoleController,
@@ -13,28 +13,28 @@ const router = Router();
 router.get(
   "/",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("user:manage"),
   getAllUsersController
 );
 
 router.post(
   "/authority",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("user:manage"),
   createAuthorityController
 );
 
 router.patch(
   "/:userId/role",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("user:manage"),
   changeUserRoleController
 );
 
 router.patch(
   "/:userId/verify",
   authenticate,
-  authorizeRoles("ADMIN"),
+  requirePermission("user:manage"),
   verifyUserController
 );
 

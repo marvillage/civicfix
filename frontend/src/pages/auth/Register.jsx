@@ -1,28 +1,31 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+  BellRing,
+  ClipboardList,
+  LocateFixed,
+  Trophy,
+  UserPlus,
+} from "lucide-react";
 import api from "../../api/axios";
-import { useAuth } from "../../context/AuthContext";
+import { BRAND, FEATURES } from "../../brand";
+import { HOME_BY_ROLE, useAuth } from "../../context/auth";
+import AuthLayout, { PasswordField } from "./AuthLayout";
 
+// Citizen accounts only; officers use /register/authority.
 export default function Register() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
 
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
-
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   function handleChange(event) {
     const { name, value } = event.target;
 
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
+    setForm((previous) => ({ ...previous, [name]: value }));
   }
 
   async function handleSubmit(event) {
@@ -32,146 +35,128 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const response = await api.post(
-        "/auth/register",
-        form
-      );
+      const response = await api.post("/auth/register", {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+      });
 
       const { token, user } = response.data;
+      const from =
+        typeof location.state?.from === "string" ? location.state.from : null;
 
       login(token, user);
-
-      navigate("/citizen");
-    } catch (error) {
-      const message =
-        error.response?.data?.message ||
-        "Unable to create account. Please try again.";
-
-      setError(message);
-    } finally {
+      navigate(from || HOME_BY_ROLE[user?.role] || "/citizen", {
+        replace: true,
+      });
+    } catch (registerError) {
+      setError(
+        registerError.response?.data?.message ||
+          "Couldn't create your account. Please try again."
+      );
       setLoading(false);
     }
   }
 
   return (
-    <div className="auth-page">
-      <aside className="auth-art">
-        <div className="auth-art-caption">
-          <p className="auth-art-eyebrow">CIVICFIX</p>
-
-          <h2>
-            Every fixed street started with one
-            report.
-          </h2>
-
-          <p>
-            Earn civic points and badges, climb the
-            ward leaderboard, and watch your
-            neighbourhood actually improve.
-          </p>
-        </div>
-      </aside>
-
-      <div className="auth-panel">
-        <div className="auth-card">
-          <Link to="/" className="auth-brand">
-            <img
-              className="brand-icon"
-              src="/images/logo-icon.png"
-              alt=""
-            />
-            CivicFix
-          </Link>
-
-          <div className="auth-header">
-            <h1>Join CivicFix</h1>
-
-          <p>
-            Create your account and start improving
-            your community.
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="name">
-              Full Name
-            </label>
-
-            <input
-              id="name"
-              name="name"
-              type="text"
-              value={form.name}
-              onChange={handleChange}
-              placeholder="Enter your name"
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="email">
-              Email
-            </label>
-
-            <input
-              id="email"
-              name="email"
-              type="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="Enter your email"
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password">
-              Password
-            </label>
-
-            <input
-              id="password"
-              name="password"
-              type="password"
-              value={form.password}
-              onChange={handleChange}
-              placeholder="Create a password"
-              minLength={6}
-              required
-            />
-          </div>
-
-          {error && (
-            <div className="form-error">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-          >
-            {loading
-              ? "Creating account..."
-              : "Create Account"}
-          </button>
-        </form>
-
-          <p className="auth-switch">
-            Already have an account?{" "}
-            <Link to="/login">Sign in</Link>
-          </p>
-
-          <p className="auth-alt">
-            Municipal staff?{" "}
-            <Link to="/register/authority">
-              Register as an authority
-            </Link>{" "}
-            — requires a government ID.
-          </p>
-        </div>
+    <AuthLayout
+      art="/images/community.png"
+      artPosition="28% center"
+      eyebrow={`Join ${BRAND.name}`}
+      title="Every fixed street started with one report."
+      text="A free account turns one-off complaints into cases you can follow, back and sign off."
+      points={[
+        { icon: ClipboardList, label: `${FEATURES.myCases}: every report, one place` },
+        { icon: BellRing, label: "Updates the moment a crew moves" },
+        { icon: LocateFixed, label: `${FEATURES.watchZones} around home and school` },
+        { icon: Trophy, label: `${FEATURES.civicCred} for reports, votes and drives` },
+      ]}
+    >
+      <div className="auth-head">
+        <p className="eyebrow">Create an account</p>
+        <h1>Join your neighbours</h1>
+        <p>
+          Free for residents. Takes under a minute, and your first report can
+          follow straight after.
+        </p>
       </div>
-    </div>
+
+      <form className="auth-form" onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="register-name">Full name</label>
+          <input
+            id="register-name"
+            name="name"
+            type="text"
+            value={form.name}
+            onChange={handleChange}
+            placeholder="As you'd like neighbours to see it"
+            autoComplete="name"
+            required
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="register-email">Email</label>
+          <input
+            id="register-email"
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="you@example.com"
+            autoComplete="email"
+            required
+          />
+        </div>
+
+        <PasswordField
+          id="register-password"
+          label="Password"
+          value={form.password}
+          onChange={handleChange}
+          placeholder="Create a password"
+          autoComplete="new-password"
+          minLength={6}
+          hint="At least 6 characters."
+          required
+        />
+
+        {error && (
+          <div className="form-error" role="alert">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          className="btn-accent btn-lg btn-block"
+          disabled={loading}
+        >
+          {loading ? (
+            <span className="spinner" aria-hidden="true" />
+          ) : (
+            <UserPlus aria-hidden="true" />
+          )}
+          {loading ? "Creating your account…" : "Create account"}
+        </button>
+      </form>
+
+      <div className="auth-alt">
+        <p>
+          Already have an account?{" "}
+          <Link to="/login" state={location.state} className="text-link">
+            Log in
+          </Link>
+        </p>
+        <p>
+          Municipal staff?{" "}
+          <Link to="/register/authority" className="text-link">
+            Officer sign-up
+          </Link>{" "}
+          needs a government ID.
+        </p>
+      </div>
+    </AuthLayout>
   );
 }
